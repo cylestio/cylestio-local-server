@@ -1,0 +1,28 @@
+# API Framework
+fastapi==0.109.0
+uvicorn==0.27.0
+pydantic==2.5.3
+starlette==0.35.0
+python-multipart==0.0.6
+
+# Database
+sqlalchemy==2.0.25
+alembic==1.13.1
+
+# Data Processing
+pandas==2.1.4
+numpy==1.26.3
+
+# Utilities
+python-dotenv==1.0.0
+pyyaml==6.0.1
+dynaconf==3.2.4
+
+# Testing
+pytest==7.4.4
+httpx==0.26.0
+pytest-cov==4.1.0
+
+# Typing
+mypy==1.8.0
+typing-extensions==4.9.0 

@@ -24,7 +24,7 @@ class Session(Base):
     __tablename__ = "sessions"
     
     id = Column(Integer, primary_key=True, autoincrement=True)
-    agent_id = Column(Integer, ForeignKey("agents.id"), nullable=False, index=True)
+    agent_id = Column(String, ForeignKey("agents.agent_id"), nullable=False, index=True)
     session_id = Column(String, unique=True, nullable=False, index=True)
     
     start_timestamp = Column(DateTime, nullable=False)
@@ -38,7 +38,7 @@ class Session(Base):
         return f"<Session {self.id} ({self.session_id})>"
     
     @classmethod
-    def get_or_create(cls, db_session, session_id: str, agent_id: int) -> "Session":
+    def get_or_create(cls, db_session, session_id: str, agent_id: str) -> "Session":
         """
         Get an existing session or create a new one if it doesn't exist.
         

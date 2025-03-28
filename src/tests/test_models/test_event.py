@@ -30,8 +30,8 @@ def test_agent(db_session):
 def test_session(db_session, test_agent):
     """Create a test session for use in event tests."""
     session = Session(
-        agent_id=test_agent.id,
         session_id="test-event-session",
+        agent_id=test_agent.agent_id,
         start_timestamp=datetime.datetime.utcnow()
     )
     db_session.add(session)
@@ -44,7 +44,7 @@ def test_trace(db_session, test_agent):
     """Create a test trace for use in event tests."""
     trace = Trace(
         trace_id="test-event-trace",
-        agent_id=test_agent.id,
+        agent_id=test_agent.agent_id,
         start_timestamp=datetime.datetime.utcnow()
     )
     db_session.add(trace)
@@ -58,7 +58,7 @@ def test_span(db_session, test_trace):
     span = Span(
         span_id="test-event-span",
         trace_id=test_trace.trace_id,
-        name="test-event-span-name",
+        name="Test Span",
         start_timestamp=datetime.datetime.utcnow()
     )
     db_session.add(span)
@@ -70,8 +70,8 @@ def test_event_creation(db_session, test_agent, test_session, test_trace, test_s
     """Test creating a new event."""
     # Create a new event
     event = Event(
-        agent_id=test_agent.id,
-        session_id=test_session.id,
+        agent_id=test_agent.agent_id,
+        session_id=test_session.session_id,
         trace_id=test_trace.trace_id,
         span_id=test_span.span_id,
         timestamp=datetime.datetime.utcnow(),
@@ -89,8 +89,8 @@ def test_event_creation(db_session, test_agent, test_session, test_trace, test_s
     
     # Verify
     assert saved_event is not None
-    assert saved_event.agent_id == test_agent.id
-    assert saved_event.session_id == test_session.id
+    assert saved_event.agent_id == test_agent.agent_id
+    assert saved_event.session_id == test_session.session_id
     assert saved_event.trace_id == test_trace.trace_id
     assert saved_event.span_id == test_span.span_id
     assert saved_event.schema_version == "1.0"
@@ -103,7 +103,7 @@ def test_event_required_fields(db_session, test_agent):
     """Test that required fields must be provided."""
     # Try to create an event with missing required fields
     event = Event(
-        agent_id=test_agent.id,
+        agent_id=test_agent.agent_id,
         # Missing: timestamp, schema_version, name, level, event_type
     )
     
@@ -121,8 +121,8 @@ def test_event_relationships(db_session, test_agent, test_session, test_trace, t
     """Test event relationships to other entities."""
     # Create a new event
     event = Event(
-        agent_id=test_agent.id,
-        session_id=test_session.id,
+        agent_id=test_agent.agent_id,
+        session_id=test_session.session_id,
         trace_id=test_trace.trace_id,
         span_id=test_span.span_id,
         timestamp=datetime.datetime.utcnow(),
@@ -139,8 +139,8 @@ def test_event_relationships(db_session, test_agent, test_session, test_trace, t
     saved_event = db_session.query(Event).filter(Event.id == event.id).first()
     
     # Verify relationships
-    assert saved_event.agent.id == test_agent.id
-    assert saved_event.session.id == test_session.id
+    assert saved_event.agent.agent_id == test_agent.agent_id
+    assert saved_event.session.session_id == test_session.session_id
     assert saved_event.trace.trace_id == test_trace.trace_id
     assert saved_event.span.span_id == test_span.span_id
 
@@ -149,7 +149,7 @@ def test_event_without_optional_relationships(db_session, test_agent):
     """Test creating an event without optional relationships."""
     # Create a new event without session, trace, or span
     event = Event(
-        agent_id=test_agent.id,
+        agent_id=test_agent.agent_id,
         timestamp=datetime.datetime.utcnow(),
         schema_version="1.0",
         name="test.event.no.relationships",
@@ -213,7 +213,7 @@ def test_get_specialized_event(db_session, test_agent):
     """Test the get_specialized_event property."""
     # Create an event
     event = Event(
-        agent_id=test_agent.id,
+        agent_id=test_agent.agent_id,
         timestamp=datetime.datetime.utcnow(),
         schema_version="1.0",
         name="test.event",

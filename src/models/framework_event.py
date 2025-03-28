@@ -6,7 +6,7 @@ such as system lifecycle events, configuration changes, and other internal event
 """
 import json
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 from sqlalchemy import Column, Integer, String, ForeignKey, Text, DateTime
 from sqlalchemy.orm import relationship
@@ -26,7 +26,12 @@ class FrameworkEvent(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     event_id = Column(Integer, ForeignKey("events.id"), nullable=False, unique=True, index=True)
     
-    category = Column(String, nullable=False, index=True)  # 'lifecycle', 'config', 'error', etc.
+    event_type = Column(String, index=True)  # 'startup', 'shutdown', 'config_change', etc.
+    framework_name = Column(String, index=True)  # 'langchain', 'llama_index', etc.
+    framework_version = Column(String)
+    
+    # For backward compatibility
+    category = Column(String, index=True)  # 'lifecycle', 'config', 'error', etc.
     subcategory = Column(String, index=True)
     component = Column(String, index=True)  # 'agent', 'server', 'monitor', etc.
     
@@ -40,12 +45,67 @@ class FrameworkEvent(Base):
     
     # Relationships
     event = relationship("Event", back_populates="framework_event")
+    attributes = relationship("FrameworkAttribute", back_populates="framework_event", cascade="all, delete-orphan")
     
     def __repr__(self) -> str:
-        return f"<FrameworkEvent {self.id} ({self.category}/{self.subcategory})>"
+        return f"<FrameworkEvent {self.id} ({self.event_type})>"
     
     @classmethod
-    def from_event(cls, db_session, event, telemetry_data: Dict[str, Any]) -> "FrameworkEvent":
+    def from_event(cls, db_session, event) -> "FrameworkEvent":
+        """
+        Create a FrameworkEvent from an event.
+        
+        Args:
+            db_session: Database session
+            event: The parent Event object
+            
+        Returns:
+            FrameworkEvent: The created framework event
+        """
+        if not event.data:
+            raise ValueError("Event data is required to create a framework event")
+            
+        try:
+            event_data = json.loads(event.data)
+        except json.JSONDecodeError:
+            raise ValueError("Event data must be valid JSON")
+            
+        payload = event_data.get("payload", {})
+        
+        # Extract event type from event name
+        event_type = "unknown"
+        if "startup" in event.name:
+            event_type = "startup"
+        elif "shutdown" in event.name:
+            event_type = "shutdown"
+        elif "config_change" in event.name:
+            event_type = "config_change"
+        elif "error" in event.name:
+            event_type = "error"
+        
+        # If payload is just a string, don't serialize it as details
+        details = None
+        if isinstance(payload, dict) and len(payload) > 1:
+            # Only create details if there's more than the framework_name
+            details_dict = {k: v for k, v in payload.items() if k != "framework_name"}
+            if details_dict:
+                details = json.dumps(details_dict)
+        
+        # Create framework event
+        framework_event = cls(
+            event_id=event.id,
+            event_type=event_type,
+            framework_name=payload.get("framework_name"),
+            framework_version=payload.get("framework_version"),
+            details=details
+        )
+        
+        db_session.add(framework_event)
+        return framework_event
+    
+    # For backward compatibility 
+    @classmethod
+    def from_event_with_telemetry(cls, db_session, event, telemetry_data: Dict[str, Any]) -> "FrameworkEvent":
         """
         Create a FrameworkEvent from an event and telemetry data.
         
@@ -95,7 +155,7 @@ class FrameworkEvent(Base):
             
         return str(value)
     
-    def get_details(self) -> Optional[Dict]:
+    def get_details_dict(self) -> Optional[Dict]:
         """
         Get the details as a dictionary.
         
@@ -109,6 +169,9 @@ class FrameworkEvent(Base):
             return json.loads(self.details)
         except (json.JSONDecodeError, TypeError):
             return None
+    
+    # For backward compatibility
+    get_details = get_details_dict
     
     def get_config_values(self) -> Dict[str, Any]:
         """
@@ -135,4 +198,20 @@ class FrameworkEvent(Base):
         return {
             "before": before,
             "after": after
-        } 
+        }
+        
+    @classmethod
+    def events_by_framework(cls, db_session, framework_name: str) -> List["FrameworkEvent"]:
+        """
+        Get all events for a specific framework.
+        
+        Args:
+            db_session: Database session
+            framework_name: Name of the framework
+            
+        Returns:
+            List[FrameworkEvent]: List of events for the framework
+        """
+        return db_session.query(cls).filter(
+            cls.framework_name == framework_name
+        ).order_by(cls.id.desc()).all() 

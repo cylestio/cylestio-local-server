@@ -6,7 +6,7 @@ This module defines the Trace model representing a group of related operations.
 from datetime import datetime
 from typing import Optional, List
 
-from sqlalchemy import Column, String, DateTime, ForeignKey
+from sqlalchemy import Column, String, DateTime, ForeignKey, Integer
 from sqlalchemy.orm import relationship
 
 from src.models.base import Base
@@ -20,7 +20,8 @@ class Trace(Base):
     """
     __tablename__ = "traces"
     
-    trace_id = Column(String, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    trace_id = Column(String, unique=True, nullable=False, index=True)
     agent_id = Column(String, ForeignKey("agents.agent_id"), nullable=False, index=True)
     start_timestamp = Column(DateTime, index=True)
     end_timestamp = Column(DateTime, index=True)

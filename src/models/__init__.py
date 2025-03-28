@@ -14,8 +14,12 @@ from src.models.event import Event
 from src.models.llm_interaction import LLMInteraction
 from src.models.llm_attribute import LLMAttribute
 from src.models.tool_interaction import ToolInteraction
+from src.models.tool_attribute import ToolAttribute
 from src.models.security_alert import SecurityAlert, SecurityAlertTrigger
+from src.models.security_attribute import SecurityAttribute
 from src.models.framework_event import FrameworkEvent
+from src.models.framework_attribute import FrameworkAttribute
+from src.models.attribute_base import AttributeBase
 
 # Define all models for easy imports
 __all__ = [
@@ -28,7 +32,11 @@ __all__ = [
     'LLMInteraction',
     'LLMAttribute',
     'ToolInteraction',
+    'ToolAttribute',
     'SecurityAlert',
     'SecurityAlertTrigger',
+    'SecurityAttribute',
     'FrameworkEvent',
+    'FrameworkAttribute',
+    'AttributeBase',
 ] 

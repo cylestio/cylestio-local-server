@@ -27,7 +27,7 @@ def test_session_creation(db_session, test_agent):
     """Test creating a new session."""
     # Create a new session
     session = Session(
-        agent_id=test_agent.id,
+        agent_id=test_agent.agent_id,
         session_id="test-session-id",
         start_timestamp=datetime.datetime.utcnow()
     )
@@ -41,7 +41,7 @@ def test_session_creation(db_session, test_agent):
     # Verify
     assert saved_session is not None
     assert saved_session.session_id == "test-session-id"
-    assert saved_session.agent_id == test_agent.id
+    assert saved_session.agent_id == test_agent.agent_id
     assert saved_session.start_timestamp is not None
     assert saved_session.end_timestamp is None
 
@@ -50,7 +50,7 @@ def test_session_uniqueness(db_session, test_agent):
     """Test that session_id must be unique."""
     # Create a new session
     session1 = Session(
-        agent_id=test_agent.id,
+        agent_id=test_agent.agent_id,
         session_id="unique-session-id",
         start_timestamp=datetime.datetime.utcnow()
     )
@@ -59,7 +59,7 @@ def test_session_uniqueness(db_session, test_agent):
     
     # Try to create another session with the same session_id
     session2 = Session(
-        agent_id=test_agent.id,
+        agent_id=test_agent.agent_id,
         session_id="unique-session-id",
         start_timestamp=datetime.datetime.utcnow()
     )
@@ -79,7 +79,7 @@ def test_session_get_or_create_new(db_session, test_agent):
     session = Session.get_or_create(
         db_session,
         session_id="new-session-id",
-        agent_id=test_agent.id
+        agent_id=test_agent.agent_id
     )
     
     db_session.commit()
@@ -87,7 +87,7 @@ def test_session_get_or_create_new(db_session, test_agent):
     # Verify
     assert session is not None
     assert session.session_id == "new-session-id"
-    assert session.agent_id == test_agent.id
+    assert session.agent_id == test_agent.agent_id
     assert session.start_timestamp is not None
     assert session.end_timestamp is None
 
@@ -97,7 +97,7 @@ def test_session_get_or_create_existing(db_session, test_agent):
     # Create a session
     start_time = datetime.datetime.utcnow()
     session1 = Session(
-        agent_id=test_agent.id,
+        agent_id=test_agent.agent_id,
         session_id="existing-session-id",
         start_timestamp=start_time
     )
@@ -108,7 +108,7 @@ def test_session_get_or_create_existing(db_session, test_agent):
     session2 = Session.get_or_create(
         db_session,
         session_id="existing-session-id",
-        agent_id=test_agent.id
+        agent_id=test_agent.agent_id
     )
     
     db_session.commit()
@@ -123,7 +123,7 @@ def test_session_end(db_session, test_agent):
     """Test ending a session."""
     # Create a session
     session = Session(
-        agent_id=test_agent.id,
+        agent_id=test_agent.agent_id,
         session_id="end-session-id",
         start_timestamp=datetime.datetime.utcnow()
     )
@@ -149,7 +149,7 @@ def test_session_end_with_timestamp(db_session, test_agent):
     end_time = datetime.datetime(2020, 1, 1, 13, 0, 0)
     
     session = Session(
-        agent_id=test_agent.id,
+        agent_id=test_agent.agent_id,
         session_id="end-time-session-id",
         start_timestamp=start_time
     )
@@ -174,7 +174,7 @@ def test_session_duration(db_session, test_agent):
     end_time = datetime.datetime(2020, 1, 1, 13, 0, 0)
     
     session = Session(
-        agent_id=test_agent.id,
+        agent_id=test_agent.agent_id,
         session_id="duration-session-id",
         start_timestamp=start_time,
         end_timestamp=end_time
@@ -193,7 +193,7 @@ def test_session_no_duration_if_not_ended(db_session, test_agent):
     """Test that duration is None if session hasn't ended."""
     # Create a session with no end time
     session = Session(
-        agent_id=test_agent.id,
+        agent_id=test_agent.agent_id,
         session_id="no-duration-session-id",
         start_timestamp=datetime.datetime.utcnow()
     )
@@ -222,7 +222,7 @@ def test_session_statistics(db_session, test_agent):
     """Test getting statistics for a session."""
     # Create a session
     session = Session(
-        agent_id=test_agent.id,
+        agent_id=test_agent.agent_id,
         session_id="stats-session-id",
         start_timestamp=datetime.datetime.utcnow()
     )

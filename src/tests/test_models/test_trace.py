@@ -27,7 +27,7 @@ def test_trace_creation(db_session, test_agent):
     # Create a new trace
     trace = Trace(
         trace_id="test-trace-id",
-        agent_id=test_agent.id,
+        agent_id=test_agent.agent_id,
         start_timestamp=datetime.datetime.utcnow()
     )
     
@@ -40,7 +40,7 @@ def test_trace_creation(db_session, test_agent):
     # Verify
     assert saved_trace is not None
     assert saved_trace.trace_id == "test-trace-id"
-    assert saved_trace.agent_id == test_agent.id
+    assert saved_trace.agent_id == test_agent.agent_id
     assert saved_trace.start_timestamp is not None
     assert saved_trace.end_timestamp is None
 
@@ -51,7 +51,7 @@ def test_trace_get_or_create_new(db_session, test_agent):
     trace = Trace.get_or_create(
         db_session,
         trace_id="new-trace-id",
-        agent_id=test_agent.id
+        agent_id=test_agent.agent_id
     )
     
     db_session.commit()
@@ -59,7 +59,7 @@ def test_trace_get_or_create_new(db_session, test_agent):
     # Verify
     assert trace is not None
     assert trace.trace_id == "new-trace-id"
-    assert trace.agent_id == test_agent.id
+    assert trace.agent_id == test_agent.agent_id
     assert trace.start_timestamp is not None
     assert trace.end_timestamp is None
 
@@ -70,7 +70,7 @@ def test_trace_get_or_create_existing(db_session, test_agent):
     start_time = datetime.datetime.utcnow()
     trace1 = Trace(
         trace_id="existing-trace-id",
-        agent_id=test_agent.id,
+        agent_id=test_agent.agent_id,
         start_timestamp=start_time
     )
     db_session.add(trace1)
@@ -80,7 +80,7 @@ def test_trace_get_or_create_existing(db_session, test_agent):
     trace2 = Trace.get_or_create(
         db_session,
         trace_id="existing-trace-id",
-        agent_id=test_agent.id
+        agent_id=test_agent.agent_id
     )
     
     db_session.commit()
@@ -96,7 +96,7 @@ def test_trace_update_timestamps(db_session, test_agent):
     # Create a trace with no timestamps
     trace = Trace(
         trace_id="update-trace-id",
-        agent_id=test_agent.id
+        agent_id=test_agent.agent_id
     )
     db_session.add(trace)
     db_session.commit()
@@ -121,7 +121,7 @@ def test_trace_update_timestamps_only_start(db_session, test_agent):
     # Create a trace with no timestamps
     trace = Trace(
         trace_id="start-only-trace-id",
-        agent_id=test_agent.id
+        agent_id=test_agent.agent_id
     )
     db_session.add(trace)
     db_session.commit()
@@ -145,7 +145,7 @@ def test_trace_update_timestamps_only_end(db_session, test_agent):
     # Create a trace with no timestamps
     trace = Trace(
         trace_id="end-only-trace-id",
-        agent_id=test_agent.id
+        agent_id=test_agent.agent_id
     )
     db_session.add(trace)
     db_session.commit()
@@ -172,7 +172,7 @@ def test_trace_duration_with_timestamps(db_session, test_agent):
     
     trace = Trace(
         trace_id="duration-trace-id",
-        agent_id=test_agent.id,
+        agent_id=test_agent.agent_id,
         start_timestamp=start_time,
         end_timestamp=end_time
     )
@@ -191,7 +191,7 @@ def test_trace_duration_without_timestamps(db_session, test_agent):
     # Create a trace with no timestamps
     trace = Trace(
         trace_id="no-duration-trace-id",
-        agent_id=test_agent.id
+        agent_id=test_agent.agent_id
     )
     db_session.add(trace)
     db_session.commit()
@@ -208,7 +208,7 @@ def test_trace_duration_with_only_start(db_session, test_agent):
     # Create a trace with only start time
     trace = Trace(
         trace_id="start-only-duration-trace-id",
-        agent_id=test_agent.id,
+        agent_id=test_agent.agent_id,
         start_timestamp=datetime.datetime.utcnow()
     )
     db_session.add(trace)

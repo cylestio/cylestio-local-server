@@ -4,8 +4,7 @@ Base models for SQLAlchemy ORM.
 This module provides the base SQLAlchemy components for the entire application.
 """
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, scoped_session
+from sqlalchemy.orm import declarative_base, sessionmaker, scoped_session
 
 # Create the SQLAlchemy base class
 Base = declarative_base()

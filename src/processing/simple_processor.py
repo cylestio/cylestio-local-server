@@ -317,19 +317,38 @@ class SimpleProcessor:
                     trace.agent = agent
                 related_models.append(trace)
         
+        # Parse event timestamp
+        timestamp_dt = datetime.fromisoformat(event_data["timestamp"].replace('Z', '+00:00'))
+        
         # Handle span if present
         span = None
         if "span_id" in event_data and event_data["span_id"]:
-            span = db_session.query(Span).filter_by(span_id=event_data["span_id"]).first()
-            if not span:
-                span = Span(
-                    span_id=event_data["span_id"],
-                    trace_id=event_data.get("trace_id"),
-                    parent_span_id=event_data.get("parent_span_id")
-                )
-                if trace:
-                    span.trace = trace
-                related_models.append(span)
+            # Use the enhanced Span.get_or_create method
+            span = Span.get_or_create(
+                db_session,
+                span_id=event_data["span_id"],
+                trace_id=event_data.get("trace_id"),
+                parent_span_id=event_data.get("parent_span_id"),
+                # Try to derive span name from event name
+                event_name=event_data.get("name")
+            )
+            
+            # Update span timestamps with the event timestamp
+            span.update_timestamps(db_session, timestamp_dt, timestamp_dt)
+            
+            if trace:
+                span.trace = trace
+            
+            # Check if this is a span-closing event
+            event_name = event_data.get("name", "")
+            if event_name.endswith(".finish") or event_name.endswith(".end") or event_name.endswith(".stop"):
+                # This is likely a closing event, so update the end timestamp
+                span.update_timestamps(db_session, end_time=timestamp_dt)
+            elif event_name.endswith(".start") or event_name.endswith(".begin"):
+                # This is likely an opening event, ensure start timestamp is set
+                span.update_timestamps(db_session, start_time=timestamp_dt)
+            
+            related_models.append(span)
         
         # Determine event type based on name
         event_name = event_data["name"]
@@ -345,7 +364,6 @@ class SimpleProcessor:
             event_type = "generic"
         
         # Create base event
-        timestamp_dt = datetime.fromisoformat(event_data["timestamp"].replace('Z', '+00:00'))
         event = Event(
             name=event_data["name"],
             timestamp=timestamp_dt,

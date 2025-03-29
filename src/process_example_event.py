@@ -12,6 +12,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 import time
 
+# Add the current directory to the Python path
+sys.path.insert(0, str(Path(__file__).parent))
+
 from models.base import init_db, get_db, create_all
 from models.event import Event
 from models.llm_interaction import LLMInteraction
@@ -73,7 +76,10 @@ db_session.commit()
 print(f"Created agents: chatbot-agent, rag-agent, weather-agent")
 
 # Load all events from example_records.json
-example_file = Path("../example_records.json")
+example_file = Path("example_records.json")
+if not example_file.exists():
+    # Try current directory parent (project root)
+    example_file = Path(__file__).parent.parent / "example_records.json"
 
 try:
     events_to_process = []

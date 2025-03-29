@@ -183,7 +183,7 @@ def test_session_duration(db_session, test_agent):
     db_session.commit()
     
     # Get the duration
-    duration = session.get_duration_seconds()
+    duration = session.duration_seconds
     
     # Verify (should be 3600 seconds = 1 hour)
     assert duration == 3600.0
@@ -201,7 +201,7 @@ def test_session_no_duration_if_not_ended(db_session, test_agent):
     db_session.commit()
     
     # Get the duration
-    duration = session.get_duration_seconds()
+    duration = session.duration_seconds
     
     # Verify
     assert duration is None
@@ -239,4 +239,169 @@ def test_session_statistics(db_session, test_agent):
     assert "trace_count" in stats
     assert "start_timestamp" in stats
     assert "end_timestamp" in stats
-    assert "duration_seconds" in stats 
+    assert "duration_seconds" in stats
+
+
+def test_session_timestamp_chronology(db_session, test_agent):
+    """Test that start_timestamp is always before or equal to end_timestamp."""
+    # Create a session with inverted timestamps (this should be fixed by our new code)
+    start_time = datetime.datetime(2020, 1, 1, 13, 0, 0)  # Later time
+    end_time = datetime.datetime(2020, 1, 1, 12, 0, 0)    # Earlier time
+    
+    session = Session(
+        agent_id=test_agent.agent_id,
+        session_id="inverted-timestamps-id",
+        start_timestamp=start_time,
+        end_timestamp=end_time
+    )
+    db_session.add(session)
+    db_session.commit()
+    
+    # Get the saved session
+    saved_session = db_session.query(Session).filter(Session.session_id == "inverted-timestamps-id").first()
+    
+    # Verify that start_timestamp is always less than or equal to end_timestamp
+    # This is checking our property to ensure duration is never negative
+    assert saved_session.duration_seconds >= 0
+    assert saved_session.start_timestamp <= saved_session.end_timestamp
+
+
+def test_session_update_timestamps(db_session, test_agent):
+    """Test updating session timestamps with events."""
+    from models.event import Event
+    
+    # Create a session
+    middle_time = datetime.datetime(2020, 1, 1, 12, 0, 0)
+    session = Session(
+        agent_id=test_agent.agent_id,
+        session_id="update-timestamps-id",
+        start_timestamp=middle_time,
+        end_timestamp=middle_time
+    )
+    db_session.add(session)
+    db_session.commit()
+    
+    # Create events with earlier and later timestamps
+    earlier_time = datetime.datetime(2020, 1, 1, 11, 0, 0)
+    later_time = datetime.datetime(2020, 1, 1, 13, 0, 0)
+    
+    # Create event with earlier timestamp
+    early_event = Event(
+        agent_id=test_agent.agent_id,
+        session_id="update-timestamps-id",
+        timestamp=earlier_time,
+        schema_version="1.0",
+        name="early-event",
+        level="INFO",
+        event_type="test"
+    )
+    db_session.add(early_event)
+    
+    # Create event with later timestamp
+    late_event = Event(
+        agent_id=test_agent.agent_id,
+        session_id="update-timestamps-id",
+        timestamp=later_time,
+        schema_version="1.0",
+        name="late-event",
+        level="INFO",
+        event_type="test"
+    )
+    db_session.add(late_event)
+    
+    db_session.commit()
+    
+    # Import processor and simulate event processing
+    from processing.simple_processor import SimpleProcessor
+    processor = SimpleProcessor(lambda: (db_session for _ in range(1)))
+    
+    # Process early event
+    processor._process_session_info(early_event, {"session.id": "update-timestamps-id"}, db_session)
+    db_session.commit()
+    
+    # Process late event
+    processor._process_session_info(late_event, {"session.id": "update-timestamps-id"}, db_session)
+    db_session.commit()
+    
+    # Get the updated session
+    updated_session = db_session.query(Session).filter(Session.session_id == "update-timestamps-id").first()
+    
+    # Verify that timestamps were updated correctly
+    assert updated_session.start_timestamp == earlier_time
+    assert updated_session.end_timestamp == later_time
+    assert updated_session.duration_seconds == 7200.0  # 2 hours difference
+
+
+def test_session_status(db_session, test_agent):
+    """Test the session status method."""
+    # Create an active session (end time very recent)
+    recent_time = datetime.datetime.utcnow() - datetime.timedelta(minutes=5)
+    active_session = Session(
+        agent_id=test_agent.agent_id,
+        session_id="active-session-id",
+        start_timestamp=recent_time,
+        end_timestamp=recent_time
+    )
+    db_session.add(active_session)
+    
+    # Create a closed session (end time long ago)
+    old_time = datetime.datetime.utcnow() - datetime.timedelta(hours=2)
+    closed_session = Session(
+        agent_id=test_agent.agent_id,
+        session_id="closed-session-id",
+        start_timestamp=old_time,
+        end_timestamp=old_time
+    )
+    db_session.add(closed_session)
+    db_session.commit()
+    
+    # Test session status
+    assert active_session.get_status() == "active"
+    assert closed_session.get_status() == "closed"
+    
+    # Test with custom threshold
+    assert active_session.get_status(inactive_threshold_minutes=2) == "closed"
+
+
+def test_get_events_sorted(db_session, test_agent):
+    """Test retrieving events sorted by timestamp."""
+    from models.event import Event
+    
+    # Create a session
+    session = Session(
+        agent_id=test_agent.agent_id,
+        session_id="sorted-events-id",
+        start_timestamp=datetime.datetime.utcnow()
+    )
+    db_session.add(session)
+    db_session.commit()
+    
+    # Create events with different timestamps
+    timestamps = [
+        datetime.datetime(2020, 1, 1, 12, 30, 0),
+        datetime.datetime(2020, 1, 1, 12, 0, 0),
+        datetime.datetime(2020, 1, 1, 13, 0, 0)
+    ]
+    
+    for i, timestamp in enumerate(timestamps):
+        event = Event(
+            agent_id=test_agent.agent_id,
+            session_id="sorted-events-id",
+            timestamp=timestamp,
+            schema_version="1.0",
+            name=f"event-{i}",
+            level="INFO",
+            event_type="test"
+        )
+        db_session.add(event)
+    
+    db_session.commit()
+    
+    # Get sorted events
+    sorted_events = session.get_events_sorted(db_session)
+    
+    # Verify that events are correctly sorted by timestamp
+    assert len(sorted_events) == 3
+    assert sorted_events[0].timestamp == timestamps[1]  # 12:00
+    assert sorted_events[1].timestamp == timestamps[0]  # 12:30
+    assert sorted_events[2].timestamp == timestamps[2]  # 13:00 

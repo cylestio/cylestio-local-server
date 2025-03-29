@@ -12,13 +12,10 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 import time
 
-# Add the current directory to the Python path
-sys.path.insert(0, str(Path(__file__).parent))
-
+# Using imports within src directory
 from models.base import init_db, get_db, create_all
 from models.event import Event
 from models.llm_interaction import LLMInteraction
-# LLMAttribute does not exist in the codebase
 from models.security_alert import SecurityAlert
 from models.framework_event import FrameworkEvent
 from models.tool_interaction import ToolInteraction
@@ -76,10 +73,7 @@ db_session.commit()
 print(f"Created agents: chatbot-agent, rag-agent, weather-agent")
 
 # Load all events from example_records.json
-example_file = Path("example_records.json")
-if not example_file.exists():
-    # Try current directory parent (project root)
-    example_file = Path(__file__).parent.parent / "example_records.json"
+example_file = Path("../example_records.json")
 
 try:
     events_to_process = []
@@ -144,7 +138,6 @@ print("="*50)
 # Count records in each table
 events_count = db_session.query(func.count(Event.id)).scalar()
 llm_interactions_count = db_session.query(func.count(LLMInteraction.id)).scalar()
-# LLMAttribute doesn't exist as a separate model, attributes are stored in raw_attributes field of LLMInteraction
 security_alerts_count = db_session.query(func.count(SecurityAlert.id)).scalar()
 framework_events_count = db_session.query(func.count(FrameworkEvent.id)).scalar()
 tool_interactions_count = db_session.query(func.count(ToolInteraction.id)).scalar()
@@ -154,7 +147,6 @@ spans_count = db_session.query(func.count(Span.span_id)).scalar()
 
 print(f"Events: {events_count}")
 print(f"LLM Interactions: {llm_interactions_count}")
-# No more LLMAttributes count
 print(f"Security Alerts: {security_alerts_count}")
 print(f"Framework Events: {framework_events_count}")
 print(f"Tool Interactions: {tool_interactions_count}")
@@ -180,9 +172,9 @@ if llm_interactions_count > 0:
     print(f"  Vendor: {llm_sample.vendor}")
     print(f"  Model: {llm_sample.model}")
     
-    # Get attributes from raw_attributes instead of LLMAttribute table
+    # Display LLM attributes from raw_attributes
     raw_attributes = llm_sample.raw_attributes or {}
-    print(f"  Attributes count: {len(raw_attributes)}")
+    print(f"  Raw attributes count: {len(raw_attributes)}")
     for key, value in raw_attributes.items():
         # Only show a preview of long values
         value_str = str(value)
@@ -224,6 +216,10 @@ if sessions_count > 0:
     print(f"  ID: {session_sample.id}")
     print(f"  Session ID: {session_sample.session_id}")
     print(f"  Agent ID: {session_sample.agent_id}")
+    print(f"  Start timestamp: {session_sample.start_timestamp}")
+    print(f"  End timestamp: {session_sample.end_timestamp}")
+    print(f"  Duration: {session_sample.duration_seconds} seconds")
+    print(f"  Status: {session_sample.get_status()}")
 
 # Traces
 if traces_count > 0:
@@ -237,6 +233,7 @@ if traces_count > 0:
 if spans_count > 0:
     print("\nSpans sample:")
     span_sample = db_session.query(Span).first()
+    print(f"  ID: {span_sample.span_id}")
     print(f"  Span ID: {span_sample.span_id}")
     print(f"  Parent Span ID: {span_sample.parent_span_id}")
     print(f"  Trace ID: {span_sample.trace_id}")
@@ -246,6 +243,6 @@ print("You can examine the database using SQLite tools like DB Browser for SQLit
 print("Sample commands to query the database using sqlite3:")
 print(f"  sqlite3 {DB_PATH} 'SELECT COUNT(*) FROM events'")
 print(f"  sqlite3 {DB_PATH} 'SELECT COUNT(*) FROM llm_interactions'")
-print(f"  sqlite3 {DB_PATH} 'SELECT COUNT(*) FROM security_alerts'")
-print(f"  sqlite3 {DB_PATH} 'SELECT DISTINCT event_type FROM events'")
-print(f"  sqlite3 {DB_PATH} 'SELECT * FROM security_alerts LIMIT 5'") 
+print(f"  sqlite3 {DB_PATH} 'SELECT COUNT(*) FROM sessions'")
+print(f"  sqlite3 {DB_PATH} 'SELECT session_id, start_timestamp, end_timestamp FROM sessions'")
+print(f"  sqlite3 {DB_PATH} 'SELECT DISTINCT event_type FROM events'") 

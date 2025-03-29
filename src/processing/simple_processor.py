@@ -571,15 +571,40 @@ class SimpleProcessor:
             return
         
         # Try to get or create the session
-        session = Session.get_or_create(db_session, session_id, event.agent_id)
+        session = Session.get_or_create(db_session, session_id, event.agent_id, initialize_end_timestamp=False)
         
         # Update event's session ID
         event.session_id = session_id
         db_session.add(event)
         
-        # Update session end timestamp if needed
-        if session.end_timestamp is None or event.timestamp > session.end_timestamp:
-            session.update_end_timestamp(db_session, event.timestamp)
+        # Ensure timestamps are comparable (both naive or both aware)
+        event_timestamp = event.timestamp
+        session_start = session.start_timestamp
+        
+        # Make timestamps timezone-naive for comparison if needed
+        if hasattr(event_timestamp, 'tzinfo') and event_timestamp.tzinfo is not None:
+            # Event timestamp is timezone-aware, make it naive
+            event_timestamp = event_timestamp.replace(tzinfo=None)
+        
+        # Update start_timestamp if this event is earlier
+        if session_start is None or event_timestamp < session_start:
+            session.start_timestamp = event_timestamp
+            db_session.add(session)
+            
+        # Always update end_timestamp if this event is later than the current end_timestamp
+        # or if end_timestamp is not set
+        if session.end_timestamp is None or event_timestamp > session.end_timestamp:
+            session.end_timestamp = event_timestamp
+            db_session.add(session)
+        
+        # Add validation to ensure start_timestamp <= end_timestamp
+        if session.start_timestamp and session.end_timestamp and session.start_timestamp > session.end_timestamp:
+            logger.warning(f"Session timestamp inversion detected for session {session_id}. Fixing...")
+            # Fix by setting both to the same value (the latest timestamp available)
+            latest_timestamp = max(session.start_timestamp, session.end_timestamp)
+            session.start_timestamp = latest_timestamp
+            session.end_timestamp = latest_timestamp
+            db_session.add(session)
     
     def _fix_timestamps(self, event: Event, llm_interaction: LLMInteraction, db_session: Session) -> None:
         """

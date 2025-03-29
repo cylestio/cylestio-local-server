@@ -37,8 +37,26 @@ class Session(Base):
     def __repr__(self) -> str:
         return f"<Session {self.id} ({self.session_id})>"
     
+    def __init__(self, **kwargs):
+        """
+        Initialize a new Session instance.
+        
+        This custom initializer ensures that start_timestamp and end_timestamp
+        maintain proper chronology.
+        """
+        # Call the parent initializer with kwargs
+        super().__init__(**kwargs)
+        
+        # Check for timestamp inversion and fix if needed
+        if (self.start_timestamp is not None and self.end_timestamp is not None and 
+                self.start_timestamp > self.end_timestamp):
+            # Fix the inversion - set both to the same value (the latest timestamp)
+            latest_timestamp = max(self.start_timestamp, self.end_timestamp)
+            self.start_timestamp = latest_timestamp
+            self.end_timestamp = latest_timestamp
+    
     @classmethod
-    def get_or_create(cls, db_session, session_id: str, agent_id: str) -> "Session":
+    def get_or_create(cls, db_session, session_id: str, agent_id: str, initialize_end_timestamp: bool = False) -> "Session":
         """
         Get an existing session or create a new one if it doesn't exist.
         
@@ -46,6 +64,7 @@ class Session(Base):
             db_session: Database session
             session_id: Unique identifier for the session
             agent_id: ID of the parent agent
+            initialize_end_timestamp: Whether to initialize end_timestamp to the same value as start_timestamp
             
         Returns:
             Session: The retrieved or created session
@@ -56,11 +75,23 @@ class Session(Base):
             return session
         
         # Create a new session if it doesn't exist
-        session = cls(
-            session_id=session_id,
-            agent_id=agent_id,
-            start_timestamp=datetime.utcnow()
-        )
+        current_time = datetime.utcnow()
+        
+        # Create the session with or without initializing end_timestamp
+        if initialize_end_timestamp:
+            session = cls(
+                session_id=session_id,
+                agent_id=agent_id,
+                start_timestamp=current_time,
+                end_timestamp=None  # Initialize as None, will be set by event timestamps
+            )
+        else:
+            # Original behavior for backward compatibility
+            session = cls(
+                session_id=session_id,
+                agent_id=agent_id,
+                start_timestamp=current_time
+            )
         
         db_session.add(session)
         return session
@@ -87,16 +118,21 @@ class Session(Base):
             self.end_timestamp = end_timestamp or datetime.utcnow()
             db_session.add(self)
     
-    def get_duration_seconds(self) -> Optional[float]:
+    @property
+    def duration_seconds(self) -> Optional[float]:
         """
         Get the duration of the session in seconds.
         
         Returns:
             float or None: The duration in seconds, or None if the session hasn't ended
         """
-        if self.end_timestamp is None:
+        if self.end_timestamp is None or self.start_timestamp is None:
             return None
         
+        if self.start_timestamp > self.end_timestamp:
+            # This should not happen with the fixes in place, but just in case
+            return 0.0
+            
         return (self.end_timestamp - self.start_timestamp).total_seconds()
     
     def update_end_timestamp(self, db_session, timestamp: datetime) -> None:
@@ -107,8 +143,18 @@ class Session(Base):
             db_session: Database session
             timestamp: The timestamp to update to
         """
+        # Make timestamps comparable (both naive or both aware)
+        session_end = self.end_timestamp
+        
+        # Make timestamps timezone-naive for comparison if needed
+        if hasattr(timestamp, 'tzinfo') and timestamp.tzinfo is not None:
+            # Timestamp is timezone-aware, make it naive for comparison
+            compare_timestamp = timestamp.replace(tzinfo=None)
+        else:
+            compare_timestamp = timestamp
+            
         # Set the end timestamp if it doesn't exist or if the new timestamp is later
-        if self.end_timestamp is None or timestamp > self.end_timestamp:
+        if session_end is None or compare_timestamp > session_end:
             self.end_timestamp = timestamp
             db_session.add(self)
     
@@ -207,5 +253,46 @@ class Session(Base):
             "trace_count": len(traces),
             "start_timestamp": self.start_timestamp,
             "end_timestamp": self.end_timestamp,
-            "duration_seconds": self.get_duration_seconds()
-        } 
+            "duration_seconds": self.duration_seconds
+        }
+    
+    def get_events_sorted(self, db_session) -> List["Event"]:
+        """
+        Get all events in the session sorted by timestamp.
+        
+        Args:
+            db_session: Database session
+            
+        Returns:
+            List[Event]: Events sorted by timestamp
+        """
+        from models.event import Event
+        
+        return db_session.query(Event).filter(
+            Event.session_id == self.session_id
+        ).order_by(Event.timestamp).all()
+    
+    def get_status(self, inactive_threshold_minutes: int = 30) -> str:
+        """
+        Get the session status based on how recent the last activity was.
+        
+        Args:
+            inactive_threshold_minutes: Number of minutes after which a session is considered inactive
+            
+        Returns:
+            str: 'active' if the session has recent activity, 'closed' otherwise
+        """
+        if self.end_timestamp is None:
+            return "active"
+            
+        # Calculate the difference between now and the last activity
+        time_since_last_activity = datetime.utcnow() - self.end_timestamp
+        
+        # Convert to minutes
+        minutes_since_last_activity = time_since_last_activity.total_seconds() / 60
+        
+        # Return status based on threshold
+        if minutes_since_last_activity <= inactive_threshold_minutes:
+            return "active"
+        else:
+            return "closed" 

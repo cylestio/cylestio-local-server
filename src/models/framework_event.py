@@ -8,10 +8,10 @@ import json
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 
-from sqlalchemy import Column, Integer, String, ForeignKey, Text, DateTime
+from sqlalchemy import Column, Integer, String, ForeignKey, Text, DateTime, JSON, Float
 from sqlalchemy.orm import relationship
 
-from src.models.base import Base
+from models.base import Base
 
 
 class FrameworkEvent(Base):
@@ -43,25 +43,40 @@ class FrameworkEvent(Base):
     message = Column(Text)
     details = Column(Text)  # JSON field for additional details
     
+    # Extracted attribute fields for better querying
+    app_version = Column(String, index=True)
+    os_type = Column(String, index=True)
+    memory_usage_mb = Column(Float)
+    cpu_usage_percent = Column(Float)
+    environment = Column(String, index=True)
+    
+    # Raw attributes JSON storage for complete data
+    raw_attributes = Column(JSON)
+    
     # Relationships
     event = relationship("Event", back_populates="framework_event")
-    attributes = relationship("FrameworkAttribute", back_populates="framework_event", cascade="all, delete-orphan")
     
     def __repr__(self) -> str:
         return f"<FrameworkEvent {self.id} ({self.event_type})>"
     
     @classmethod
-    def from_event(cls, db_session, event) -> "FrameworkEvent":
+    def from_event(cls, db_session, event, telemetry_data=None) -> "FrameworkEvent":
         """
         Create a FrameworkEvent from an event.
         
         Args:
             db_session: Database session
             event: The parent Event object
+            telemetry_data: Optional telemetry data dictionary
             
         Returns:
             FrameworkEvent: The created framework event
         """
+        # If telemetry_data is provided, use the method with telemetry support
+        if telemetry_data:
+            return cls.from_event_with_telemetry(db_session, event, telemetry_data)
+            
+        # Original implementation for backward compatibility
         if not event.data:
             raise ValueError("Event data is required to create a framework event")
             
@@ -91,19 +106,29 @@ class FrameworkEvent(Base):
             if details_dict:
                 details = json.dumps(details_dict)
         
+        # Extract attributes
+        attributes = payload.get("attributes", {})
+        
         # Create framework event
         framework_event = cls(
             event_id=event.id,
             event_type=event_type,
             framework_name=payload.get("framework_name"),
             framework_version=payload.get("framework_version"),
-            details=details
+            details=details,
+            raw_attributes=attributes,  # Store raw attributes
+            
+            # Extract known attributes to dedicated columns
+            app_version=attributes.get("app_version", payload.get("app_version")),
+            os_type=attributes.get("os_type", payload.get("os_type")),
+            memory_usage_mb=attributes.get("memory_usage_mb", payload.get("memory_usage_mb")),
+            cpu_usage_percent=attributes.get("cpu_usage_percent", payload.get("cpu_usage_percent")),
+            environment=attributes.get("environment", payload.get("environment"))
         )
         
         db_session.add(framework_event)
         return framework_event
     
-    # For backward compatibility 
     @classmethod
     def from_event_with_telemetry(cls, db_session, event, telemetry_data: Dict[str, Any]) -> "FrameworkEvent":
         """
@@ -112,25 +137,39 @@ class FrameworkEvent(Base):
         Args:
             db_session: Database session
             event: The parent Event object
-            telemetry_data: The telemetry data dictionary
+            telemetry_data: Telemetry data dictionary
             
         Returns:
             FrameworkEvent: The created framework event
         """
-        data = telemetry_data.get("data", {})
+        attributes = telemetry_data.get('attributes', {})
+        
+        # Extract event type from event name
+        event_type = "unknown"
+        if "startup" in event.name:
+            event_type = "startup"
+        elif "shutdown" in event.name:
+            event_type = "shutdown"
+        elif "config_change" in event.name:
+            event_type = "config_change"
+        elif "error" in event.name:
+            event_type = "error"
         
         # Create framework event
         framework_event = cls(
             event_id=event.id,
-            category=data.get("category", "unknown"),
-            subcategory=data.get("subcategory"),
-            component=data.get("component"),
-            lifecycle_state=data.get("lifecycle_state"),
-            config_parameter=data.get("config_parameter"),
-            config_value_before=cls._serialize_config_value(data.get("config_value_before")),
-            config_value_after=cls._serialize_config_value(data.get("config_value_after")),
-            message=data.get("message"),
-            details=json.dumps(data.get("details")) if data.get("details") else None
+            event_type=event_type,
+            framework_name=attributes.get('framework.name'),
+            framework_version=attributes.get('framework.version'),
+            details=json.dumps(attributes) if attributes else None,
+            raw_attributes=attributes,  # Store raw attributes
+            
+            # Extract known attributes to dedicated columns
+            app_version=attributes.get("app_version") or attributes.get("framework.app_version"),
+            os_type=attributes.get("os_type") or attributes.get("framework.os_type"),
+            memory_usage_mb=attributes.get("memory_usage_mb") or attributes.get("framework.memory_usage_mb"),
+            cpu_usage_percent=attributes.get("cpu_usage_percent") or attributes.get("framework.cpu_usage_percent"),
+            environment=attributes.get("environment") or attributes.get("framework.environment")
         )
         
         db_session.add(framework_event)
@@ -199,6 +238,22 @@ class FrameworkEvent(Base):
             "before": before,
             "after": after
         }
+    
+    def get_attribute(self, key: str, default: Any = None) -> Any:
+        """
+        Get an attribute value by key.
+        
+        Args:
+            key: Attribute key
+            default: Default value if attribute not found
+            
+        Returns:
+            Attribute value or default
+        """
+        if not self.raw_attributes:
+            return default
+            
+        return self.raw_attributes.get(key, default)
         
     @classmethod
     def events_by_framework(cls, db_session, framework_name: str) -> List["FrameworkEvent"]:

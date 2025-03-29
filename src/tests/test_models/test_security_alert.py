@@ -5,9 +5,9 @@ import json
 import datetime
 import pytest
 
-from src.models.agent import Agent
-from src.models.event import Event
-from src.models.security_alert import SecurityAlert
+from models.agent import Agent
+from models.event import Event
+from models.security_alert import SecurityAlert
 
 
 @pytest.fixture

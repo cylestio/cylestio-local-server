@@ -5,9 +5,9 @@ import json
 import datetime
 import pytest
 
-from src.models.agent import Agent
-from src.models.event import Event
-from src.models.tool_interaction import ToolInteraction
+from models.agent import Agent
+from models.event import Event
+from models.tool_interaction import ToolInteraction
 
 
 @pytest.fixture

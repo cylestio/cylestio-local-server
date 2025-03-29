@@ -9,7 +9,7 @@ from typing import Optional, Dict, Any, List, Union
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
 from sqlalchemy.orm import relationship, backref
 
-from src.models.base import Base
+from models.base import Base
 
 
 class Event(Base):
@@ -109,10 +109,10 @@ class Event(Base):
         Returns:
             Event: The created event
         """
-        from src.models.agent import Agent
-        from src.models.session import Session
-        from src.models.trace import Trace
-        from src.models.span import Span
+        from models.agent import Agent
+        from models.session import Session
+        from models.trace import Trace
+        from models.span import Span
         
         # Get or create related entities
         agent = Agent.get_or_create(
@@ -174,16 +174,16 @@ class Event(Base):
         
         # Create specialized event based on event type
         if event_type == 'llm':
-            from src.models.llm_interaction import LLMInteraction
+            from models.llm_interaction import LLMInteraction
             LLMInteraction.from_event(db_session, event, telemetry_data)
         elif event_type == 'tool':
-            from src.models.tool_interaction import ToolInteraction
+            from models.tool_interaction import ToolInteraction
             ToolInteraction.from_event(db_session, event, telemetry_data)
         elif event_type == 'security':
-            from src.models.security_alert import SecurityAlert
+            from models.security_alert import SecurityAlert
             SecurityAlert.from_event(db_session, event, telemetry_data)
         elif event_type == 'framework':
-            from src.models.framework_event import FrameworkEvent
+            from models.framework_event import FrameworkEvent
             FrameworkEvent.from_event(db_session, event, telemetry_data)
         
         # Update related entity timestamps

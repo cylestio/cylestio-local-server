@@ -5,9 +5,9 @@ import json
 import datetime
 import pytest
 
-from src.models.agent import Agent
-from src.models.event import Event
-from src.models.framework_event import FrameworkEvent
+from models.agent import Agent
+from models.event import Event
+from models.framework_event import FrameworkEvent
 
 
 @pytest.fixture

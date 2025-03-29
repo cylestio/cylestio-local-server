@@ -9,7 +9,7 @@ from typing import Optional, List
 from sqlalchemy import Column, String, DateTime, ForeignKey, Integer
 from sqlalchemy.orm import relationship
 
-from src.models.base import Base
+from models.base import Base
 
 
 class Trace(Base):
@@ -102,7 +102,7 @@ class Trace(Base):
         Returns:
             int: Number of events
         """
-        from src.models.event import Event
+        from models.event import Event
         return db_session.query(Event).filter(Event.trace_id == self.trace_id).count()
     
     def get_span_count(self, db_session) -> int:
@@ -115,7 +115,7 @@ class Trace(Base):
         Returns:
             int: Number of spans
         """
-        from src.models.span import Span
+        from models.span import Span
         return db_session.query(Span).filter(Span.trace_id == self.trace_id).count()
     
     def get_root_spans(self, db_session) -> List["Span"]:
@@ -128,7 +128,7 @@ class Trace(Base):
         Returns:
             List[Span]: Root spans
         """
-        from src.models.span import Span
+        from models.span import Span
         return db_session.query(Span).filter(
             Span.trace_id == self.trace_id,
             Span.parent_span_id == None

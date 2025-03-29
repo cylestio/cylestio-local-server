@@ -11,7 +11,7 @@ import uuid
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, func
 from sqlalchemy.orm import relationship
 
-from src.models.base import Base
+from models.base import Base
 
 
 class Session(Base):
@@ -99,6 +99,19 @@ class Session(Base):
         
         return (self.end_timestamp - self.start_timestamp).total_seconds()
     
+    def update_end_timestamp(self, db_session, timestamp: datetime) -> None:
+        """
+        Update the session's end timestamp if the provided timestamp is more recent.
+        
+        Args:
+            db_session: Database session
+            timestamp: The timestamp to update to
+        """
+        # Set the end timestamp if it doesn't exist or if the new timestamp is later
+        if self.end_timestamp is None or timestamp > self.end_timestamp:
+            self.end_timestamp = timestamp
+            db_session.add(self)
+    
     def get_event_count(self, db_session) -> int:
         """
         Get the total number of events in the session.
@@ -109,7 +122,7 @@ class Session(Base):
         Returns:
             int: The total number of events
         """
-        from src.models.event import Event
+        from models.event import Event
         
         return db_session.query(func.count(Event.id)).filter(
             Event.session_id == self.id
@@ -126,7 +139,7 @@ class Session(Base):
         Returns:
             List[Event]: Events of the specified type
         """
-        from src.models.event import Event
+        from models.event import Event
         
         return db_session.query(Event).filter(
             Event.session_id == self.id,
@@ -143,8 +156,8 @@ class Session(Base):
         Returns:
             List[Trace]: Traces containing events from this session
         """
-        from src.models.trace import Trace
-        from src.models.event import Event
+        from models.trace import Trace
+        from models.event import Event
         
         # Get unique trace_ids for this session
         trace_ids_query = db_session.query(Event.trace_id).filter(
@@ -172,7 +185,7 @@ class Session(Base):
         Returns:
             Dict: Statistics about the session
         """
-        from src.models.event import Event
+        from models.event import Event
         
         event_count = self.get_event_count(db_session)
         

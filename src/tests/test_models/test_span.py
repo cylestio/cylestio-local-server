@@ -4,9 +4,9 @@ Tests for the Span model.
 import datetime
 import pytest
 
-from src.models.agent import Agent
-from src.models.trace import Trace
-from src.models.span import Span
+from models.agent import Agent
+from models.trace import Trace
+from models.span import Span
 
 
 @pytest.fixture

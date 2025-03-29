@@ -5,8 +5,8 @@ import datetime
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from src.models.agent import Agent
-from src.models.session import Session
+from models.agent import Agent
+from models.session import Session
 
 
 @pytest.fixture

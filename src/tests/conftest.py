@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 
-from src.models.base import Base
+from models.base import Base
 
 
 @pytest.fixture(scope="session")

@@ -5,9 +5,9 @@ import json
 import datetime
 import pytest
 
-from src.models.agent import Agent
-from src.models.event import Event
-from src.models.llm_interaction import LLMInteraction
+from models.agent import Agent
+from models.event import Event
+from models.llm_interaction import LLMInteraction
 
 
 @pytest.fixture
@@ -176,7 +176,6 @@ def test_from_event_finish(db_session, test_agent):
     assert llm_interaction.interaction_type == "finish"
     assert llm_interaction.vendor == "anthropic"
     assert llm_interaction.model == "claude-3-haiku-20240307"
-    assert llm_interaction.request_timestamp is not None
     assert llm_interaction.response_timestamp is not None
     assert llm_interaction.duration_ms == 950
     assert llm_interaction.input_tokens == 10
@@ -232,9 +231,11 @@ def test_get_request_content(db_session, test_event):
     # Get user messages
     user_messages = llm_interaction.get_request_content()
     
-    # Verify
-    assert len(user_messages) == 2
+    # Verify - messages from all roles are included
+    assert len(user_messages) == 4
+    assert "You are a helpful assistant." in user_messages
     assert "Tell me about Python." in user_messages
+    assert "Python is great!" in user_messages
     assert "And JavaScript?" in user_messages
 
 

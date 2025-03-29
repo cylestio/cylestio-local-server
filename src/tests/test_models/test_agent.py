@@ -5,7 +5,7 @@ import datetime
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from src.models.agent import Agent
+from models.agent import Agent
 
 
 def test_agent_creation(db_session):

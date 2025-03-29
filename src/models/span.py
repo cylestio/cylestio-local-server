@@ -9,7 +9,7 @@ from typing import Optional, List
 from sqlalchemy import Column, String, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 
-from src.models.base import Base
+from models.base import Base
 
 
 class Span(Base):
@@ -122,7 +122,7 @@ class Span(Base):
         Returns:
             int: Number of events
         """
-        from src.models.event import Event
+        from models.event import Event
         return db_session.query(Event).filter(Event.span_id == self.span_id).count()
     
     def get_span_tree(self, db_session) -> List["Span"]:

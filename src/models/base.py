@@ -3,7 +3,7 @@ Base models for SQLAlchemy ORM.
 
 This module provides the base SQLAlchemy components for the entire application.
 """
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import declarative_base, sessionmaker, scoped_session
 
 # Create the SQLAlchemy base class
@@ -37,7 +37,7 @@ def init_db(db_url: str, echo: bool = False):
     
     # Set pragma to enable foreign keys
     with engine.connect() as conn:
-        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute(text("PRAGMA foreign_keys = ON"))
     
     return engine
 

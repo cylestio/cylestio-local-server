@@ -5,11 +5,11 @@ import json
 import datetime
 import pytest
 
-from src.models.agent import Agent
-from src.models.session import Session
-from src.models.trace import Trace
-from src.models.span import Span
-from src.models.event import Event
+from models.agent import Agent
+from models.session import Session
+from models.trace import Trace
+from models.span import Span
+from models.event import Event
 
 
 @pytest.fixture

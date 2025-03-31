@@ -242,6 +242,67 @@ if framework_events_count > 0:
     print(f"  ID: {framework_sample.id}")
     print(f"  Event ID: {framework_sample.event_id}")
     print(f"  Framework: {framework_sample.framework_name}")
+    print(f"  Framework Version: {framework_sample.framework_version}")
+    print(f"  Category: {framework_sample.category}")
+    print(f"  Subcategory: {framework_sample.subcategory}")
+    print(f"  Component: {framework_sample.component}")
+    print(f"  Lifecycle State: {framework_sample.lifecycle_state}")
+    print(f"  Message: {framework_sample.message}")
+    
+    # Add detailed stats for framework events fields
+    print("\nFramework Events Field Statistics:")
+    
+    # Check framework_name parameter stats
+    framework_name_count = db_session.query(func.count(FrameworkEvent.id)).filter(FrameworkEvent.framework_name.isnot(None)).scalar()
+    framework_name_null = db_session.query(func.count(FrameworkEvent.id)).filter(FrameworkEvent.framework_name.is_(None)).scalar()
+    print(f"  Framework Name: {framework_name_count} populated, {framework_name_null} NULL")
+    
+    # Check framework_version parameter stats
+    framework_version_count = db_session.query(func.count(FrameworkEvent.id)).filter(FrameworkEvent.framework_version.isnot(None)).scalar()
+    framework_version_null = db_session.query(func.count(FrameworkEvent.id)).filter(FrameworkEvent.framework_version.is_(None)).scalar()
+    print(f"  Framework Version: {framework_version_count} populated, {framework_version_null} NULL")
+    
+    # Check category parameter stats
+    category_count = db_session.query(func.count(FrameworkEvent.id)).filter(FrameworkEvent.category.isnot(None)).scalar()
+    category_null = db_session.query(func.count(FrameworkEvent.id)).filter(FrameworkEvent.category.is_(None)).scalar()
+    print(f"  Category: {category_count} populated, {category_null} NULL")
+    
+    # Check subcategory parameter stats
+    subcategory_count = db_session.query(func.count(FrameworkEvent.id)).filter(FrameworkEvent.subcategory.isnot(None)).scalar()
+    subcategory_null = db_session.query(func.count(FrameworkEvent.id)).filter(FrameworkEvent.subcategory.is_(None)).scalar()
+    print(f"  Subcategory: {subcategory_count} populated, {subcategory_null} NULL")
+    
+    # Check component parameter stats
+    component_count = db_session.query(func.count(FrameworkEvent.id)).filter(FrameworkEvent.component.isnot(None)).scalar()
+    component_null = db_session.query(func.count(FrameworkEvent.id)).filter(FrameworkEvent.component.is_(None)).scalar()
+    print(f"  Component: {component_count} populated, {component_null} NULL")
+    
+    # Check lifecycle_state parameter stats
+    lifecycle_state_count = db_session.query(func.count(FrameworkEvent.id)).filter(FrameworkEvent.lifecycle_state.isnot(None)).scalar()
+    lifecycle_state_null = db_session.query(func.count(FrameworkEvent.id)).filter(FrameworkEvent.lifecycle_state.is_(None)).scalar()
+    print(f"  Lifecycle State: {lifecycle_state_count} populated, {lifecycle_state_null} NULL")
+    
+    # Check message parameter stats
+    message_count = db_session.query(func.count(FrameworkEvent.id)).filter(FrameworkEvent.message.isnot(None)).scalar()
+    message_null = db_session.query(func.count(FrameworkEvent.id)).filter(FrameworkEvent.message.is_(None)).scalar()
+    print(f"  Message: {message_count} populated, {message_null} NULL")
+    
+    # Sample a few different framework events to verify extraction for different types/formats
+    print("\nSampling different framework events:")
+    framework_samples = db_session.query(FrameworkEvent).limit(7).all()
+    
+    for i, sample in enumerate(framework_samples):
+        print(f"\n  Sample {i+1}:")
+        # Get the event to see the name
+        event = db_session.query(Event).filter(Event.id == sample.event_id).first()
+        print(f"    Event Name: {event.name if event else 'Unknown'}")
+        print(f"    Framework Name: {sample.framework_name}")
+        print(f"    Framework Version: {sample.framework_version}")
+        print(f"    Category: {sample.category}")
+        print(f"    Subcategory: {sample.subcategory}")
+        print(f"    Component: {sample.component}")
+        print(f"    Lifecycle State: {sample.lifecycle_state}")
+        print(f"    Message: {sample.message}")
 
 # Tool interactions
 if tool_interactions_count > 0:

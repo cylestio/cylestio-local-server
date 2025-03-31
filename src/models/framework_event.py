@@ -97,6 +97,12 @@ class FrameworkEvent(Base):
             event_type = "config_change"
         elif "error" in event.name:
             event_type = "error"
+        elif "patch" in event.name:
+            event_type = "patch"
+        elif "initialization" in event.name:
+            event_type = "initialization"
+        elif "unpatch" in event.name:
+            event_type = "unpatch"
         
         # If payload is just a string, don't serialize it as details
         details = None
@@ -109,12 +115,84 @@ class FrameworkEvent(Base):
         # Extract attributes
         attributes = payload.get("attributes", {})
         
+        # Extract framework data
+        # Legacy: directly in payload
+        framework_name = payload.get("framework_name")
+        framework_version = payload.get("framework_version")
+        
+        # New approach: from attributes
+        if not framework_name:
+            # Check if framework.name exists in attributes
+            framework_name = attributes.get("framework.name")
+            
+            # Alternative format: framework directly without dots
+            if not framework_name and "framework" in attributes:
+                framework_name = attributes.get("framework")
+        
+        # Extract version
+        if not framework_version:
+            framework_version = attributes.get("framework.version")
+            if not framework_version and "version" in attributes:
+                framework_version = attributes.get("version")
+        
+        # Extract category and subcategory from attributes
+        category = None
+        subcategory = None
+        
+        # Extract category from framework.type or type
+        if "framework.type" in attributes:
+            category = attributes.get("framework.type")
+        elif "type" in attributes:
+            category = attributes.get("type")
+        
+        # Extract subcategory from patch.type or subcategory attributes
+        if "patch.type" in attributes:
+            subcategory = attributes.get("patch.type")
+        elif "method" in attributes:
+            subcategory = attributes.get("method")
+            
+        # Extract component information
+        component = None
+        if "component" in attributes:
+            component = attributes.get("component")
+        elif "patch.components" in attributes:
+            components = attributes.get("patch.components")
+            if isinstance(components, list):
+                component = ", ".join(components)
+            else:
+                component = str(components)
+                
+        # Extract lifecycle state
+        lifecycle_state = None
+        if "lifecycle_state" in attributes:
+            lifecycle_state = attributes.get("lifecycle_state")
+        elif "framework.initialization_time" in attributes:
+            lifecycle_state = "initialized"
+        elif "patch_time" in attributes:
+            lifecycle_state = "patched"
+        elif "unpatch" in event.name.lower():
+            lifecycle_state = "unpatched"
+        elif "patch" in event.name.lower():
+            lifecycle_state = "patched"
+            
+        # Extract message
+        message = None
+        if "message" in attributes:
+            message = attributes.get("message")
+        elif "note" in attributes:
+            message = attributes.get("note")
+        
         # Create framework event
         framework_event = cls(
             event_id=event.id,
             event_type=event_type,
-            framework_name=payload.get("framework_name"),
-            framework_version=payload.get("framework_version"),
+            framework_name=framework_name,
+            framework_version=framework_version,
+            category=category,
+            subcategory=subcategory,
+            component=component,
+            lifecycle_state=lifecycle_state,
+            message=message,
             details=details,
             raw_attributes=attributes,  # Store raw attributes
             
@@ -154,19 +232,86 @@ class FrameworkEvent(Base):
             event_type = "config_change"
         elif "error" in event.name:
             event_type = "error"
+        elif "patch" in event.name:
+            event_type = "patch"
+        elif "initialization" in event.name:
+            event_type = "initialization"
+        elif "unpatch" in event.name:
+            event_type = "unpatch"
+            
+        # Extract framework data
+        framework_name = attributes.get('framework.name')
+        if not framework_name and "framework" in attributes:
+            framework_name = attributes.get("framework")
+            
+        framework_version = attributes.get('framework.version')
+        if not framework_version and "version" in attributes:
+            framework_version = attributes.get("version")
+            
+        # Extract category and subcategory
+        category = None
+        subcategory = None
+        
+        # Extract category from framework.type or type attributes
+        if "framework.type" in attributes:
+            category = attributes.get("framework.type")
+        elif "type" in attributes:
+            category = attributes.get("type")
+        
+        # Extract subcategory from patch.type, method, or similar attributes
+        if "patch.type" in attributes:
+            subcategory = attributes.get("patch.type")
+        elif "method" in attributes:
+            subcategory = attributes.get("method")
+            
+        # Extract component information
+        component = None
+        if "component" in attributes:
+            component = attributes.get("component")
+        elif "patch.components" in attributes:
+            components = attributes.get("patch.components")
+            if isinstance(components, list):
+                component = ", ".join(components)
+            else:
+                component = str(components)
+                
+        # Extract lifecycle state
+        lifecycle_state = None
+        if "lifecycle_state" in attributes:
+            lifecycle_state = attributes.get("lifecycle_state")
+        elif "framework.initialization_time" in attributes:
+            lifecycle_state = "initialized"
+        elif "patch_time" in attributes:
+            lifecycle_state = "patched"
+        elif "unpatch" in event.name.lower():
+            lifecycle_state = "unpatched"
+        elif "patch" in event.name.lower():
+            lifecycle_state = "patched"
+            
+        # Extract message
+        message = None
+        if "message" in attributes:
+            message = attributes.get("message")
+        elif "note" in attributes:
+            message = attributes.get("note")
         
         # Create framework event
         framework_event = cls(
             event_id=event.id,
             event_type=event_type,
-            framework_name=attributes.get('framework.name'),
-            framework_version=attributes.get('framework.version'),
+            framework_name=framework_name,
+            framework_version=framework_version,
+            category=category,
+            subcategory=subcategory,
+            component=component,
+            lifecycle_state=lifecycle_state,
+            message=message,
             details=json.dumps(attributes) if attributes else None,
             raw_attributes=attributes,  # Store raw attributes
             
             # Extract known attributes to dedicated columns
             app_version=attributes.get("app_version") or attributes.get("framework.app_version"),
-            os_type=attributes.get("os_type") or attributes.get("framework.os_type"),
+            os_type=attributes.get("os_type") or attributes.get("framework.os_type") or attributes.get("env.os.type"),
             memory_usage_mb=attributes.get("memory_usage_mb") or attributes.get("framework.memory_usage_mb"),
             cpu_usage_percent=attributes.get("cpu_usage_percent") or attributes.get("framework.cpu_usage_percent"),
             environment=attributes.get("environment") or attributes.get("framework.environment")

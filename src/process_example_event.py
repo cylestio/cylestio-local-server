@@ -73,7 +73,7 @@ db_session.commit()
 print(f"Created agents: chatbot-agent, rag-agent, weather-agent")
 
 # Load all events from example_records.json
-example_file = Path("../example_records.json")
+example_file = Path("example_records.json")
 
 try:
     events_to_process = []
@@ -208,6 +208,57 @@ if tool_interactions_count > 0:
     print(f"  ID: {tool_sample.id}")
     print(f"  Event ID: {tool_sample.event_id}")
     print(f"  Tool Name: {tool_sample.tool_name}")
+    print(f"  Interaction Type: {tool_sample.interaction_type}")
+    print(f"  Status: {tool_sample.status}")
+    print(f"  Parameters: {tool_sample.parameters}")
+    print(f"  Result: {tool_sample.result}")
+    print(f"  Request Timestamp: {tool_sample.request_timestamp}")
+    print(f"  Response Timestamp: {tool_sample.response_timestamp}")
+    print(f"  Duration (ms): {tool_sample.duration_ms}")
+    
+    # Display all tool interactions
+    print("\nAll Tool Interactions:")
+    all_tools = db_session.query(ToolInteraction).all()
+    for i, tool in enumerate(all_tools):
+        print(f"  Tool {i+1}:")
+        print(f"    ID: {tool.id}")
+        print(f"    Tool Name: {tool.tool_name}")
+        print(f"    Interaction Type: {tool.interaction_type}")
+        print(f"    Status: {tool.status}")
+        print(f"    Parameters: {tool.get_parameters_dict()}")
+        print(f"    Result: {tool.get_result_dict()}")
+        print(f"    Duration (ms): {tool.duration_ms}")
+    
+    # Test the complete tool interactions feature
+    print("\nComplete Tool Interaction Cycles:")
+    complete_cycles = ToolInteraction.get_complete_interactions(db_session)
+    print(f"Found {len(complete_cycles)} complete tool interaction cycles")
+    
+    for i, (execution, result) in enumerate(complete_cycles):
+        print(f"  Cycle {i+1}:")
+        print(f"    Execution ID: {execution.id}")
+        print(f"    Tool Name: {execution.tool_name}")
+        print(f"    Status: {execution.status}")
+        print(f"    Duration (ms): {execution.duration_ms}")
+        
+        # Get the events to show span_id
+        exec_event = db_session.query(Event).filter(Event.id == execution.event_id).first()
+        if exec_event:
+            print(f"    Span ID: {exec_event.span_id}")
+        
+        if result:
+            print(f"    Has matching result: Yes")
+            print(f"    Result ID: {result.id}")
+        else:
+            print(f"    Has matching result: No")
+    
+    # Test success rate calculation
+    success_rate = ToolInteraction.calculate_success_rate(db_session)
+    print(f"\nTool Interaction Success Rate: {success_rate:.1f}%")
+    
+    # Test average duration calculation
+    avg_duration = ToolInteraction.get_average_duration(db_session)
+    print(f"Average Tool Interaction Duration: {avg_duration:.1f} ms")
 
 # Sessions
 if sessions_count > 0:

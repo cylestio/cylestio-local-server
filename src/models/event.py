@@ -209,7 +209,7 @@ class Event(Base):
         """
         if event_name.startswith('llm.'):
             return 'llm'
-        elif event_name.startswith('tool.'):
+        elif event_name.startswith('tool.') or event_name.endswith('.tool'):
             return 'tool'
         elif event_name.startswith('security.'):
             return 'security'

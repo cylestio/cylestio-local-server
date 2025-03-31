@@ -11,6 +11,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 import time
+import logging
 
 # Using imports within src directory
 from models.base import init_db, get_db, create_all
@@ -172,6 +173,13 @@ if llm_interactions_count > 0:
     print(f"  Vendor: {llm_sample.vendor}")
     print(f"  Model: {llm_sample.model}")
     
+    # Add debugging for configuration parameters
+    print(f"  Temperature: {llm_sample.temperature}")
+    print(f"  Max Tokens: {llm_sample.max_tokens}")
+    print(f"  Top P: {llm_sample.top_p}")
+    print(f"  Frequency Penalty: {llm_sample.frequency_penalty}")
+    print(f"  Presence Penalty: {llm_sample.presence_penalty}")
+    
     # Display LLM attributes from raw_attributes
     raw_attributes = llm_sample.raw_attributes or {}
     print(f"  Raw attributes count: {len(raw_attributes)}")
@@ -179,6 +187,40 @@ if llm_interactions_count > 0:
         # Only show a preview of long values
         value_str = str(value)
         print(f"    {key}: {value_str[:50]}..." if len(value_str) > 50 else f"    {key}: {value_str}")
+    
+    # Print statistics for parameters across all LLM interactions
+    print("\nLLM Configuration Parameter Statistics:")
+    
+    # Check temperature parameter stats
+    temperature_count = db_session.query(func.count(LLMInteraction.id)).filter(LLMInteraction.temperature.isnot(None)).scalar()
+    temperature_null = db_session.query(func.count(LLMInteraction.id)).filter(LLMInteraction.temperature.is_(None)).scalar()
+    print(f"  Temperature: {temperature_count} populated, {temperature_null} NULL")
+    
+    # Check max_tokens parameter stats
+    max_tokens_count = db_session.query(func.count(LLMInteraction.id)).filter(LLMInteraction.max_tokens.isnot(None)).scalar()
+    max_tokens_null = db_session.query(func.count(LLMInteraction.id)).filter(LLMInteraction.max_tokens.is_(None)).scalar()
+    print(f"  Max Tokens: {max_tokens_count} populated, {max_tokens_null} NULL")
+    
+    # Check top_p parameter stats
+    top_p_count = db_session.query(func.count(LLMInteraction.id)).filter(LLMInteraction.top_p.isnot(None)).scalar()
+    top_p_null = db_session.query(func.count(LLMInteraction.id)).filter(LLMInteraction.top_p.is_(None)).scalar()
+    print(f"  Top P: {top_p_count} populated, {top_p_null} NULL")
+    
+    # Sample a few different LLM interactions to verify extraction for different vendors/formats
+    print("\nSampling a few different LLM interactions:")
+    llm_samples = db_session.query(LLMInteraction).limit(5).all()
+    for i, sample in enumerate(llm_samples):
+        print(f"\n  Sample {i+1}:")
+        print(f"    Vendor: {sample.vendor}")
+        print(f"    Model: {sample.model}")
+        print(f"    Temperature: {sample.temperature}")
+        print(f"    Max Tokens: {sample.max_tokens}")
+        print(f"    Top P: {sample.top_p}")
+        
+        # Also print the event name to see if it's start or finish
+        event = db_session.query(Event).filter(Event.id == sample.event_id).first()
+        if event:
+            print(f"    Event Name: {event.name}")
 
 # Security alerts
 if security_alerts_count > 0:
@@ -296,4 +338,117 @@ print(f"  sqlite3 {DB_PATH} 'SELECT COUNT(*) FROM events'")
 print(f"  sqlite3 {DB_PATH} 'SELECT COUNT(*) FROM llm_interactions'")
 print(f"  sqlite3 {DB_PATH} 'SELECT COUNT(*) FROM sessions'")
 print(f"  sqlite3 {DB_PATH} 'SELECT session_id, start_timestamp, end_timestamp FROM sessions'")
-print(f"  sqlite3 {DB_PATH} 'SELECT DISTINCT event_type FROM events'") 
+print(f"  sqlite3 {DB_PATH} 'SELECT DISTINCT event_type FROM events'")
+
+def debug_llm_parameters():
+    """Debug the extraction of LLM parameters from the database."""
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.orm import sessionmaker
+    import json
+    
+    # Create engine and session
+    engine = create_engine(f"sqlite:////{DB_PATH}")
+    Session = sessionmaker(bind=engine)
+    db_session = Session()
+    
+    # Get all LLM interactions
+    llm_interactions = db_session.execute(text("""
+        SELECT 
+            li.id, 
+            li.event_id,
+            li.interaction_type,
+            li.vendor,
+            li.model,
+            li.temperature,
+            li.max_tokens,
+            li.raw_attributes
+        FROM llm_interactions li
+    """)).fetchall()
+    
+    print(f"Found {len(llm_interactions)} LLM interactions")
+    
+    # Iterate through each interaction
+    for interaction in llm_interactions[:5]:  # Check first 5 for brevity
+        interaction_id = interaction[0]
+        event_id = interaction[1]
+        interaction_type = interaction[2]
+        vendor = interaction[3]
+        temperature = interaction[5] 
+        max_tokens = interaction[6]
+        raw_attributes_json = interaction[7]
+        
+        print(f"\nAnalyzing interaction {interaction_id} (event_id: {event_id}, type: {interaction_type}, vendor: {vendor})")
+        print(f"  Stored temperature: {temperature}")
+        print(f"  Stored max_tokens: {max_tokens}")
+        
+        # Parse raw attributes
+        if raw_attributes_json:
+            try:
+                raw_attributes = json.loads(raw_attributes_json)
+                print(f"  Raw attributes available: {len(raw_attributes)} keys")
+                
+                # Check temperature possibilities
+                print("  Checking temperature fields:")
+                temperature_keys = [
+                    'temperature', 'llm.temperature', 'llm.request.temperature',
+                    'llm.request.data.temperature'
+                ]
+                for key in temperature_keys:
+                    if key in raw_attributes:
+                        print(f"    ✓ {key}: {raw_attributes[key]}")
+                    else:
+                        print(f"    ✗ {key}: not found")
+                
+                # Check max_tokens possibilities
+                print("  Checking max_tokens fields:")
+                max_tokens_keys = [
+                    'max_tokens', 'llm.max_tokens', 'llm.request.max_tokens',
+                    'llm.request.data.max_tokens', 'llm.request.max_tokens_to_sample'
+                ]
+                for key in max_tokens_keys:
+                    if key in raw_attributes:
+                        print(f"    ✓ {key}: {raw_attributes[key]}")
+                    else:
+                        print(f"    ✗ {key}: not found")
+                
+                # Check if we have request_data
+                if 'llm.request.data' in raw_attributes:
+                    try:
+                        request_data = raw_attributes['llm.request.data']
+                        if isinstance(request_data, str):
+                            request_data = json.loads(request_data)
+                        
+                        print("  Request data structure:")
+                        print(f"    Keys: {list(request_data.keys())}")
+                        
+                        # Look for parameters in request_data
+                        if 'temperature' in request_data:
+                            print(f"    ✓ request_data['temperature']: {request_data['temperature']}")
+                        
+                        if 'max_tokens' in request_data:
+                            print(f"    ✓ request_data['max_tokens']: {request_data['max_tokens']}")
+                        
+                        # Anthropic-specific
+                        if 'max_tokens_to_sample' in request_data:
+                            print(f"    ✓ request_data['max_tokens_to_sample']: {request_data['max_tokens_to_sample']}")
+                    except Exception as e:
+                        print(f"  Error parsing request_data: {str(e)}")
+            except Exception as e:
+                print(f"  Error parsing raw_attributes: {str(e)}")
+        else:
+            print("  No raw attributes available")
+    
+    db_session.close()
+
+if __name__ == "__main__":
+    # Configure logging
+    logging.basicConfig(level=logging.INFO)
+    
+    # Main processing - the entire script from the beginning until the DATABASE EVALUATION section
+    # We don't need to call a function here as the processing code is already in the global scope
+    
+    # Debug LLM parameters extraction
+    print("\n" + "=" * 50)
+    print("LLM PARAMETERS DEBUG")
+    print("=" * 50)
+    debug_llm_parameters() 

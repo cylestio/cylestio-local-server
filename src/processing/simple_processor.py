@@ -7,7 +7,7 @@ events in the database.
 import json
 import logging
 from typing import Dict, Any, List, Union, Optional, Tuple
-from datetime import datetime, UTC, timedelta
+from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
@@ -294,7 +294,7 @@ class SimpleProcessor:
         # Find or create agent
         agent = db_session.query(Agent).filter_by(agent_id=event_data["agent_id"]).first()
         if not agent:
-            current_time = datetime.now(UTC)
+            current_time = datetime.utcnow()
             agent = Agent(
                 agent_id=event_data["agent_id"],
                 name=f"Agent-{event_data['agent_id'][:8]}",
@@ -348,7 +348,9 @@ class SimpleProcessor:
                 # This is likely an opening event, ensure start timestamp is set
                 span.update_timestamps(db_session, start_time=timestamp_dt)
             
-            related_models.append(span)
+            # Always add span to related_models
+            if span not in related_models:
+                related_models.append(span)
         
         # Determine event type based on name
         event_name = event_data["name"]
@@ -429,6 +431,10 @@ class SimpleProcessor:
         # Process attributes
         if "attributes" in event_data and event_data["attributes"]:
             self._process_attributes(event, event_data["attributes"], event_type, related_models, db_session)
+        
+        # Check if this event could be a trigger for any existing security alerts
+        if "span_id" in event_data and event_data["span_id"] and event_type != "security":
+            self._check_event_as_security_trigger(event, db_session)
         
         return event, related_models
     
@@ -666,22 +672,171 @@ class SimpleProcessor:
         if not event:
             return
             
-        # Find potential triggering events
-        # (events from the same agent that occurred shortly before the alert)
-        potential_triggers = db_session.query(Event).filter(
-            Event.agent_id == event.agent_id,
-            Event.timestamp < event.timestamp,
-            Event.timestamp > (event.timestamp - timedelta(minutes=1)),
-            Event.id != event.id
-        ).order_by(Event.timestamp.desc()).limit(1).all()
+        # First try to find events with matching span_id
+        if event.span_id:
+            matching_events = db_session.query(Event).filter(
+                Event.span_id == event.span_id,
+                Event.id != event.id
+            ).order_by(Event.timestamp.asc()).all()
+            
+            if matching_events:
+                # Associate with the first event in the span
+                trigger_event = matching_events[0]
+                logger.info(f"Found matching event {trigger_event.id} with span_id {event.span_id}")
+                
+                # Create the security alert trigger
+                trigger = SecurityAlertTrigger(
+                    alert_id=security_alert.id,
+                    triggering_event_id=trigger_event.id
+                )
+                db_session.add(trigger)
+                return
+                
+        # If no matching span_id, try content comparison
+        # Look for LLM interactions that might have triggered this alert
+        if "suspicious content" in str(security_alert.raw_attributes).lower() or "harmful content" in str(security_alert.raw_attributes).lower():
+            # Find recent LLM interactions from the same agent
+            potential_triggers = db_session.query(Event).filter(
+                Event.agent_id == event.agent_id,
+                Event.event_type == "llm",
+                Event.timestamp < event.timestamp,
+                Event.timestamp > (event.timestamp - timedelta(minutes=5))
+            ).order_by(Event.timestamp.desc()).all()
+            
+            for trigger_event in potential_triggers:
+                # Compare content to find the most likely trigger
+                if self._compare_security_content(security_alert, trigger_event):
+                    logger.info(f"Found matching event {trigger_event.id} through content comparison")
+                    
+                    # Create the security alert trigger
+                    trigger = SecurityAlertTrigger(
+                        alert_id=security_alert.id,
+                        triggering_event_id=trigger_event.id
+                    )
+                    db_session.add(trigger)
+                    return
+                    
+        # If no match found, log it for later processing
+        logger.warning(f"Could not find matching event for security alert {security_alert.id}")
         
-        if potential_triggers:
-            trigger_event = potential_triggers[0]
+    def _compare_security_content(self, security_alert, event) -> bool:
+        """
+        Compare security alert content with event content to find matches.
+        
+        Args:
+            security_alert: Security alert model
+            event: Event model
             
-            # Create the security alert trigger
-            trigger = SecurityAlertTrigger(
-                alert_id=security_alert.id,
-                triggering_event_id=trigger_event.id
-            )
+        Returns:
+            bool: True if content matches, False otherwise
+        """
+        if not security_alert.raw_attributes:
+            return False
             
-            db_session.add(trigger) 
+        # Extract relevant content for comparison
+        alert_content = str(security_alert.raw_attributes)
+        
+        # For LLM events, check the LLM interaction raw attributes
+        if event.event_type == 'llm' and hasattr(event, 'llm_interaction') and event.llm_interaction:
+            if not event.llm_interaction.raw_attributes:
+                return False
+            event_content = str(event.llm_interaction.raw_attributes)
+        else:
+            # Fall back to event raw_attributes if available
+            if not hasattr(event, 'raw_attributes') or not event.raw_attributes:
+                return False
+            event_content = str(event.raw_attributes)
+        
+        # Look for suspicious content patterns
+        if "suspicious content in prompt" in alert_content.lower() or "harmful content" in alert_content.lower():
+            if "prompt" in event_content.lower() and any(word in event_content.lower() for word in ["harmful", "malicious", "dangerous"]):
+                return True
+        
+        # Look for common identifiers like vendor names
+        if "vendor" in alert_content.lower():
+            vendor_match = None
+            for part in alert_content.lower().split("vendor"):
+                if part.strip() and len(part.strip()) > 0:
+                    vendor_name = part.split()[0].strip().strip('":,}').lower()
+                    if vendor_name and vendor_name in event_content.lower():
+                        return True
+                
+        # Look for common patterns in suspicious content
+        suspicious_patterns = [
+            "harmful", "malicious", "dangerous", "exploit",
+            "injection", "attack", "hack", "breach"
+        ]
+        
+        for pattern in suspicious_patterns:
+            if pattern in alert_content.lower() and pattern in event_content.lower():
+                return True
+                
+        return False
+    
+    def _check_event_as_security_trigger(self, event: Event, db_session: Session) -> None:
+        """
+        Check if this event could be a trigger for any existing security alerts.
+        
+        This handles the case where security alerts arrive before their triggering events.
+        
+        Args:
+            event: Event model that might be a trigger
+            db_session: SQLAlchemy session
+        """
+        from models.security_alert import SecurityAlert, SecurityAlertTrigger
+        
+        # Skip if no span_id
+        if not event.span_id:
+            return
+            
+        logger.debug(f"Checking if event {event.id} with span_id {event.span_id} could be a security alert trigger")
+        
+        # Find security alerts with the same span_id that don't have trigger associations
+        unassociated_alerts = db_session.query(SecurityAlert).join(
+            Event, SecurityAlert.event_id == Event.id
+        ).outerjoin(
+            SecurityAlertTrigger, SecurityAlertTrigger.alert_id == SecurityAlert.id
+        ).filter(
+            Event.span_id == event.span_id,
+            Event.id != event.id,
+            SecurityAlertTrigger.id == None
+        ).all()
+        
+        if unassociated_alerts:
+            logger.info(f"Found {len(unassociated_alerts)} unassociated security alerts with matching span_id {event.span_id}")
+            
+            for alert in unassociated_alerts:
+                # Create the security alert trigger
+                trigger = SecurityAlertTrigger(
+                    alert_id=alert.id,
+                    triggering_event_id=event.id
+                )
+                db_session.add(trigger)
+                logger.info(f"Retrospectively associated security alert {alert.id} with event {event.id}")
+                
+        # If no span matches, try content comparison for LLM interactions
+        elif event.event_type == "llm":
+            # Find recent unassociated security alerts
+            recent_unassociated_alerts = db_session.query(SecurityAlert).join(
+                Event, SecurityAlert.event_id == Event.id
+            ).outerjoin(
+                SecurityAlertTrigger, SecurityAlertTrigger.alert_id == SecurityAlert.id
+            ).filter(
+                Event.agent_id == event.agent_id,
+                Event.timestamp > (event.timestamp - timedelta(minutes=5)),
+                Event.timestamp < (event.timestamp + timedelta(minutes=5)),
+                SecurityAlertTrigger.id == None
+            ).all()
+            
+            for alert in recent_unassociated_alerts:
+                # Compare content
+                if self._compare_security_content(alert, event):
+                    logger.info(f"Found matching security alert {alert.id} through content comparison")
+                    
+                    # Create the security alert trigger
+                    trigger = SecurityAlertTrigger(
+                        alert_id=alert.id,
+                        triggering_event_id=event.id
+                    )
+                    db_session.add(trigger)
+                    break  # Only associate with one alert 

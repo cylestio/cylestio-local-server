@@ -98,33 +98,44 @@ class TestSimpleProcessor:
     def test_transform_event_generic(self, processor, sample_event_data, db_session_factory):
         """Test transforming a generic event."""
         session = db_session_factory()
-        event, related_models = processor._transform_event(sample_event_data, session)
         
-        assert isinstance(event, Event)
-        assert event.name == sample_event_data["name"]
-        assert event.timestamp.isoformat().replace('+00:00', 'Z') == sample_event_data["timestamp"]
-        assert event.level == sample_event_data["level"]
-        assert event.agent_id == sample_event_data["agent_id"]
-        assert event.trace_id == sample_event_data["trace_id"]
-        assert event.span_id == sample_event_data["span_id"]
-        assert event.schema_version == sample_event_data["schema_version"]
-        assert event.event_type == "generic"
+        # Mock Span.get_or_create to return a mock span
+        mock_span = MagicMock()
+        mock_span.span_id = sample_event_data["span_id"]
         
-        # Check that agent is in related models
-        assert any(hasattr(model, 'agent_id') and model.agent_id == sample_event_data["agent_id"] for model in related_models)
-        
-        # Check that trace is in related models
-        assert any(hasattr(model, 'trace_id') and model.trace_id == sample_event_data["trace_id"] for model in related_models)
-        
-        # Check that span is in related models
-        assert any(hasattr(model, 'span_id') and model.span_id == sample_event_data["span_id"] for model in related_models)
+        with patch('models.span.Span.get_or_create', return_value=mock_span):
+            event, related_models = processor._transform_event(sample_event_data, session)
+            
+            assert isinstance(event, Event)
+            assert event.name == sample_event_data["name"]
+            assert event.timestamp.isoformat().replace('+00:00', 'Z') == sample_event_data["timestamp"]
+            assert event.level == sample_event_data["level"]
+            assert event.agent_id == sample_event_data["agent_id"]
+            assert event.trace_id == sample_event_data["trace_id"]
+            assert event.span_id == sample_event_data["span_id"]
+            assert event.schema_version == sample_event_data["schema_version"]
+            assert event.event_type == "generic"
+            
+            # Check that agent is in related models
+            assert any(hasattr(model, 'agent_id') and model.agent_id == sample_event_data["agent_id"] for model in related_models)
+            
+            # Check that trace is in related models
+            assert any(hasattr(model, 'trace_id') and model.trace_id == sample_event_data["trace_id"] for model in related_models)
+            
+            # Check that span is in related models
+            assert any(hasattr(model, 'span_id') and model.span_id == sample_event_data["span_id"] for model in related_models)
     
     def test_transform_event_llm(self, processor, sample_llm_event_data, db_session_factory):
         """Test transforming an LLM event."""
         session = db_session_factory()
         
+        # Mock Span.get_or_create to return a mock span
+        mock_span = MagicMock()
+        mock_span.span_id = sample_llm_event_data["span_id"]
+        
         # Mock LLMInteraction.from_event to return a mock object
-        with patch('models.llm_interaction.LLMInteraction.from_event') as mock_from_event:
+        with patch('models.llm_interaction.LLMInteraction.from_event') as mock_from_event, \
+             patch('models.span.Span.get_or_create', return_value=mock_span):
             mock_llm_interaction = MagicMock()
             mock_from_event.return_value = mock_llm_interaction
             

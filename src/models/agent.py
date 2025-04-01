@@ -11,7 +11,7 @@ import uuid
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, func
 from sqlalchemy.orm import relationship
 
-from models.base import Base
+from src.models.base import Base
 
 
 class Agent(Base):
@@ -143,7 +143,7 @@ class Agent(Base):
         Returns:
             Session or None: The active session, if any
         """
-        from models.session import Session
+        from src.models.session import Session
         
         return db_session.query(Session).filter(
             Session.agent_id == self.agent_id,
@@ -161,7 +161,7 @@ class Agent(Base):
         Returns:
             List[Event]: The agent's most recent events
         """
-        from models.event import Event
+        from src.models.event import Event
         
         return db_session.query(Event).filter(
             Event.agent_id == self.agent_id
@@ -178,7 +178,7 @@ class Agent(Base):
         Returns:
             List[Trace]: The agent's most recent traces
         """
-        from models.trace import Trace
+        from src.models.trace import Trace
         
         return db_session.query(Trace).filter(
             Trace.agent_id == self.agent_id
@@ -194,9 +194,9 @@ class Agent(Base):
         Returns:
             Dict: Statistics about the agent's telemetry data
         """
-        from models.event import Event
-        from models.trace import Trace
-        from models.session import Session
+        from src.models.event import Event
+        from src.models.trace import Trace
+        from src.models.session import Session
         
         event_count = db_session.query(func.count(Event.id)).filter(
             Event.agent_id == self.agent_id
@@ -229,7 +229,7 @@ class Agent(Base):
         Returns:
             int: Number of events
         """
-        from models.event import Event
+        from src.models.event import Event
         return db_session.query(Event).filter(Event.agent_id == self.agent_id).count()
     
     def get_session_count(self, db_session) -> int:
@@ -242,7 +242,7 @@ class Agent(Base):
         Returns:
             int: Number of sessions
         """
-        from models.session import Session
+        from src.models.session import Session
         return db_session.query(Session).filter(Session.agent_id == self.agent_id).count()
     
     def get_token_usage(self, db_session, start_time: Optional[datetime] = None, 
@@ -258,8 +258,8 @@ class Agent(Base):
         Returns:
             Dict containing token usage metrics by model
         """
-        from models.event import Event
-        from models.llm_interaction import LLMInteraction
+        from src.models.event import Event
+        from src.models.llm_interaction import LLMInteraction
         
         query = db_session.query(
             LLMInteraction.model,
@@ -305,8 +305,8 @@ class Agent(Base):
         Returns:
             Dict mapping tool names to usage counts
         """
-        from models.event import Event
-        from models.tool_interaction import ToolInteraction
+        from src.models.event import Event
+        from src.models.tool_interaction import ToolInteraction
         
         query = db_session.query(
             ToolInteraction.tool_name,
@@ -341,8 +341,8 @@ class Agent(Base):
         Returns:
             Dict mapping alert levels to counts
         """
-        from models.event import Event
-        from models.security_alert import SecurityAlert
+        from src.models.event import Event
+        from src.models.security_alert import SecurityAlert
         
         query = db_session.query(
             SecurityAlert.alert_level,

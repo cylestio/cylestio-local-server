@@ -1,8 +1,8 @@
 """
-Framework Event model and related functionality.
+Framework event model for framework-specific events.
 
-This module defines the FrameworkEvent model for storing framework-specific events
-such as system lifecycle events, configuration changes, and other internal events.
+This module defines the FrameworkEvent model for storing events related to
+framework instrumentation and integration.
 """
 import json
 from datetime import datetime
@@ -11,7 +11,7 @@ from typing import Dict, Any, Optional, List
 from sqlalchemy import Column, Integer, String, ForeignKey, Text, DateTime, JSON, Float
 from sqlalchemy.orm import relationship
 
-from models.base import Base
+from src.models.base import Base
 
 
 class FrameworkEvent(Base):

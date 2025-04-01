@@ -6,12 +6,12 @@ and the SecurityAlertTrigger model for connecting events with the alerts they tr
 """
 import json
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Set, Union, Tuple
 
 from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, Text, DateTime, Table, JSON
 from sqlalchemy.orm import relationship
 
-from models.base import Base
+from src.models.base import Base
 
 
 class SecurityAlert(Base):
@@ -224,7 +224,7 @@ class SecurityAlert(Base):
         Returns:
             List[Event]: List of events that triggered this alert
         """
-        from models.event import Event
+        from src.models.event import Event
         
         triggers = db_session.query(SecurityAlertTrigger).filter(
             SecurityAlertTrigger.alert_id == self.id
@@ -246,7 +246,7 @@ class SecurityAlert(Base):
         Returns:
             List[SecurityAlert]: List of open alerts for the agent
         """
-        from models.event import Event
+        from src.models.event import Event
         
         # Find all open alerts for events belonging to this agent
         return db_session.query(cls).join(
@@ -275,4 +275,61 @@ class SecurityAlertTrigger(Base):
     triggering_event = relationship("Event", back_populates="triggered_alerts")
     
     def __repr__(self) -> str:
-        return f"<SecurityAlertTrigger {self.id} (Alert: {self.alert_id}, Event: {self.triggering_event_id})>" 
+        return f"<SecurityAlertTrigger {self.id} (Alert: {self.alert_id}, Event: {self.triggering_event_id})>"
+    
+    @staticmethod
+    def create_from_event_match(db_session, alert_event, triggering_event) -> "SecurityAlertTrigger":
+        """
+        Create a trigger relationship between an alert and an event that triggered it.
+        
+        Args:
+            db_session: Database session
+            alert_event: The security alert event
+            triggering_event: The event that triggered the alert
+            
+        Returns:
+            SecurityAlertTrigger: The created trigger relationship
+        """
+        from src.models.event import Event
+        
+        # Make sure we have an Event object for each
+        if not isinstance(alert_event, Event):
+            alert_event = db_session.query(Event).filter(Event.id == alert_event).first()
+            
+        if not isinstance(triggering_event, Event):
+            triggering_event = db_session.query(Event).filter(Event.id == triggering_event).first()
+            
+        # Create and return the trigger
+        trigger = SecurityAlertTrigger(
+            alert_id=alert_event.id,
+            triggering_event_id=triggering_event.id
+        )
+        
+        db_session.add(trigger)
+        return trigger
+        
+    @staticmethod
+    def find_matching_events(db_session, alert: "SecurityAlert") -> List["Event"]:
+        """
+        Find events that match the conditions of a security alert.
+        
+        Args:
+            db_session: Database session
+            alert: The security alert to match against
+            
+        Returns:
+            List[Event]: Events that match the alert conditions
+        """
+        from src.models.event import Event
+        
+        # Basic query for all events in the same trace
+        query = db_session.query(Event).filter(
+            Event.trace_id == alert.event.trace_id
+        )
+        
+        # Add time range filter
+        if alert.event.timestamp:
+            # All events before the alert
+            query = query.filter(Event.timestamp <= alert.event.timestamp)
+            
+        return query.all() 

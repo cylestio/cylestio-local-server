@@ -6,7 +6,7 @@ data from AI agents. It includes components for querying data, calculating
 metrics, and generating insights from telemetry events.
 """
 
-from analysis.interface import (
+from src.analysis.interface import (
     AnalysisInterface,
     BaseQueryParams,
     MetricParams,
@@ -19,7 +19,7 @@ from analysis.interface import (
     Pagination
 )
 
-from analysis.metrics import (
+from src.analysis.metrics import (
     TokenMetrics,
     ToolMetrics,
     SecurityMetrics,

@@ -1,15 +1,18 @@
 """
-Trace model and related functionality.
+Trace model for distributed tracing.
 
-This module defines the Trace model representing a group of related operations.
+This module defines the Trace model, which represents a single trace in a
+distributed tracing system. A trace contains multiple spans that together
+represent a complete request or operation.
 """
 from datetime import datetime
-from typing import Optional, List
+from typing import Dict, Any, List, Optional, Tuple
+import uuid
 
-from sqlalchemy import Column, String, DateTime, ForeignKey, Integer
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, func
 from sqlalchemy.orm import relationship
 
-from models.base import Base
+from src.models.base import Base
 
 
 class Trace(Base):
@@ -94,42 +97,49 @@ class Trace(Base):
     
     def get_event_count(self, db_session) -> int:
         """
-        Get the total number of events in this trace.
+        Get the number of events associated with this trace.
         
         Args:
             db_session: Database session
             
         Returns:
-            int: Number of events
+            int: The number of events
         """
-        from models.event import Event
-        return db_session.query(Event).filter(Event.trace_id == self.trace_id).count()
+        from src.models.event import Event
+        
+        return db_session.query(func.count(Event.id)).filter(
+            Event.trace_id == self.trace_id
+        ).scalar() or 0
     
     def get_span_count(self, db_session) -> int:
         """
-        Get the total number of spans in this trace.
+        Get the number of spans in this trace.
         
         Args:
             db_session: Database session
             
         Returns:
-            int: Number of spans
+            int: The number of spans
         """
-        from models.span import Span
-        return db_session.query(Span).filter(Span.trace_id == self.trace_id).count()
+        from src.models.span import Span
+        
+        return db_session.query(func.count(Span.id)).filter(
+            Span.trace_id == self.trace_id
+        ).scalar() or 0
     
     def get_root_spans(self, db_session) -> List["Span"]:
         """
-        Get the root spans (spans with no parent) in this trace.
+        Get the root spans (spans without parents) in this trace.
         
         Args:
             db_session: Database session
             
         Returns:
-            List[Span]: Root spans
+            List[Span]: The root spans
         """
-        from models.span import Span
+        from src.models.span import Span
+        
         return db_session.query(Span).filter(
             Span.trace_id == self.trace_id,
-            Span.parent_span_id == None
+            Span.parent_span_id.is_(None)
         ).all() 

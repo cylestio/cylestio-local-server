@@ -1,8 +1,8 @@
 """
 Security metrics implementation.
 
-This module provides metrics related to security alerts and potential
-vulnerabilities in the telemetry data.
+This module provides metrics related to security alerts and issues
+detected during AI agent operations.
 """
 from typing import Dict, List, Any, Optional, Tuple, Union
 from datetime import datetime
@@ -10,18 +10,19 @@ import json
 
 from sqlalchemy import func, and_, or_, desc, text, case, cast, String, JSON
 from sqlalchemy.orm import Session, aliased
+from sqlalchemy.sql import label
 
-from models.event import Event
-from models.security_alert import SecurityAlert
-from models.llm_interaction import LLMInteraction
-from analysis.interface import (
+from src.models.event import Event
+from src.models.security_alert import SecurityAlert
+from src.models.llm_interaction import LLMInteraction
+from src.analysis.interface import (
     AnalysisInterface, 
     TimeSeriesParams, 
     MetricParams,
     TimeRange,
     QueryResult
 )
-from analysis.utils import (
+from src.analysis.utils import (
     format_time_series_data,
     sql_time_bucket,
     deep_get,

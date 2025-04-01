@@ -1,8 +1,8 @@
 """
 Dashboard metrics implementation.
 
-This module provides high-level metrics for the dashboard, combining data
-from various sources into a coherent view.
+This module provides high-level, aggregated metrics suitable for
+dashboard displays and summary statistics.
 """
 from typing import Dict, List, Any, Optional, Tuple, Union
 from datetime import datetime, timedelta
@@ -11,20 +11,20 @@ import json
 from sqlalchemy import func, and_, or_, desc, text, case
 from sqlalchemy.orm import Session, aliased
 
-from models.event import Event
-from models.llm_interaction import LLMInteraction
-from models.tool_interaction import ToolInteraction
-from models.security_alert import SecurityAlert
-from models.agent import Agent
-from models.session import Session as SessionModel
-from analysis.interface import (
+from src.models.event import Event
+from src.models.llm_interaction import LLMInteraction
+from src.models.tool_interaction import ToolInteraction
+from src.models.security_alert import SecurityAlert
+from src.models.agent import Agent
+from src.models.session import Session as SessionModel
+from src.analysis.interface import (
     AnalysisInterface, 
     TimeSeriesParams, 
     MetricParams,
     TimeRange,
     QueryResult
 )
-from analysis.utils import (
+from src.analysis.utils import (
     format_time_series_data,
     sql_time_bucket,
     calculate_token_cost

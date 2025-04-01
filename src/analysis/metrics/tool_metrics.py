@@ -10,16 +10,16 @@ from datetime import datetime
 from sqlalchemy import func, and_, or_, desc, text, case
 from sqlalchemy.orm import Session, aliased
 
-from models.event import Event
-from models.tool_interaction import ToolInteraction
-from analysis.interface import (
+from src.models.event import Event
+from src.models.tool_interaction import ToolInteraction
+from src.analysis.interface import (
     AnalysisInterface, 
     TimeSeriesParams, 
     MetricParams,
     TimeRange,
     QueryResult
 )
-from analysis.utils import (
+from src.analysis.utils import (
     format_time_series_data,
     sql_time_bucket,
     calculate_percentiles

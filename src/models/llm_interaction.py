@@ -1,16 +1,17 @@
 """
-LLM Interaction model and related functionality.
+LLM interaction model and related functionality.
 
-This module defines the LLMInteraction model for LLM API call events.
+This module defines the LLMInteraction model for storing LLM interactions
+from telemetry events.
 """
-from datetime import datetime
-from typing import Dict, Any, List, Optional
 import json
+from datetime import datetime
+from typing import Dict, Any, List, Optional, Union, Tuple
 
-from sqlalchemy import Column, Integer, String, DateTime, JSON, ForeignKey, Float, Boolean
+from sqlalchemy import Column, Integer, String, Float, Boolean, Text, DateTime, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 
-from models.base import Base
+from src.models.base import Base
 
 
 class LLMInteraction(Base):

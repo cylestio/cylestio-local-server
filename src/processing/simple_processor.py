@@ -12,13 +12,13 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 
-from models.event import Event
-from models.agent import Agent
-from models.trace import Trace
-from models.span import Span
-from models.llm_interaction import LLMInteraction
-from models.security_alert import SecurityAlert
-from models.framework_event import FrameworkEvent
+from src.models.event import Event
+from src.models.agent import Agent
+from src.models.trace import Trace
+from src.models.span import Span
+from src.models.llm_interaction import LLMInteraction
+from src.models.security_alert import SecurityAlert
+from src.models.framework_event import FrameworkEvent
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -248,6 +248,18 @@ class SimpleProcessor:
                 "valid": False,
                 "error": f"Field timestamp must be a string, got {type(event_data['timestamp']).__name__}"
             }
+            
+        # Validate timestamp format
+        try:
+            # Convert to datetime object - strip timezone info to make it naive
+            timestamp = datetime.fromisoformat(event_data["timestamp"].replace('Z', '+00:00'))
+            # Replace the string timestamp with a naive datetime to avoid timezone comparison issues
+            event_data["timestamp"] = timestamp.replace(tzinfo=None)
+        except ValueError:
+            return {
+                "valid": False,
+                "error": f"Invalid timestamp format: {event_data['timestamp']}"
+            }
         
         if not isinstance(event_data["name"], str):
             return {
@@ -318,7 +330,11 @@ class SimpleProcessor:
                 related_models.append(trace)
         
         # Parse event timestamp
-        timestamp_dt = datetime.fromisoformat(event_data["timestamp"].replace('Z', '+00:00'))
+        if isinstance(event_data["timestamp"], str):
+            timestamp_dt = datetime.fromisoformat(event_data["timestamp"].replace('Z', '+00:00'))
+        else:
+            # Already a datetime object
+            timestamp_dt = event_data["timestamp"]
         
         # Handle span if present
         span = None
@@ -413,7 +429,7 @@ class SimpleProcessor:
         elif event_type == "tool":
             try:
                 # Import here to avoid circular imports
-                from models.tool_interaction import ToolInteraction
+                from src.models.tool_interaction import ToolInteraction
                 specialized_event = ToolInteraction.from_event(db_session, event, event_data)
                 if specialized_event:
                     logger.debug(f"Created Tool interaction with ID {specialized_event.id}")
@@ -569,7 +585,7 @@ class SimpleProcessor:
             attributes: Dictionary of attributes
             db_session: SQLAlchemy session
         """
-        from models.session import Session
+        from src.models.session import Session
         
         # Check if session ID is available in attributes
         session_id = attributes.get('session.id')
@@ -665,7 +681,7 @@ class SimpleProcessor:
             security_alert: Security alert model
             db_session: SQLAlchemy session
         """
-        from models.security_alert import SecurityAlertTrigger
+        from src.models.security_alert import SecurityAlertTrigger
         
         # Get the alert's event
         event = security_alert.event
@@ -783,7 +799,7 @@ class SimpleProcessor:
             event: Event model that might be a trigger
             db_session: SQLAlchemy session
         """
-        from models.security_alert import SecurityAlert, SecurityAlertTrigger
+        from src.models.security_alert import SecurityAlert, SecurityAlertTrigger
         
         # Skip if no span_id
         if not event.span_id:
@@ -840,3 +856,57 @@ class SimpleProcessor:
                     )
                     db_session.add(trigger)
                     break  # Only associate with one alert 
+
+# Standalone function for testing and API layer
+def process_event(event_data: Dict[str, Any], db_session: Session) -> Event:
+    """
+    Process a single telemetry event and store it in the database.
+    This is a wrapper around SimpleProcessor for the API layer.
+    
+    Args:
+        event_data: Dictionary containing the event data
+        db_session: Database session
+        
+    Returns:
+        The created Event object
+        
+    Raises:
+        Exception: If event processing fails
+    """
+    # Manual validation for required fields
+    required_fields = ["timestamp", "name", "level", "agent_id", "trace_id"]
+    for field in required_fields:
+        if field not in event_data:
+            raise ValueError(f"Missing required field: {field}")
+    
+    # Create event
+    try:
+        # Parse timestamp
+        if isinstance(event_data["timestamp"], str):
+            timestamp = datetime.fromisoformat(event_data["timestamp"].replace('Z', '+00:00'))
+        else:
+            timestamp = event_data["timestamp"]
+            
+        # Create event object
+        event = Event(
+            schema_version=event_data.get("schema_version", "1.0"),
+            timestamp=timestamp,
+            trace_id=event_data["trace_id"],
+            span_id=event_data.get("span_id"),
+            parent_span_id=event_data.get("parent_span_id"),
+            name=event_data["name"],
+            level=event_data["level"],
+            agent_id=event_data["agent_id"],
+            attributes=event_data.get("attributes", {})
+        )
+        
+        # Add to session
+        db_session.add(event)
+        db_session.commit()
+        
+        return event
+        
+    except Exception as e:
+        db_session.rollback()
+        logger.error(f"Error processing event: {str(e)}", exc_info=True)
+        raise 

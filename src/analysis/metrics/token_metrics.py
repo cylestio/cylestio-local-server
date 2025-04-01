@@ -1,18 +1,18 @@
 """
 Token usage metrics implementation.
 
-This module provides metrics related to token usage, such as total tokens,
-input tokens, output tokens, and token usage over time.
+This module provides metrics related to token usage, including input tokens,
+output tokens, and total tokens used by LLM models.
 """
 from typing import Dict, List, Any, Optional, Tuple, Union
 from datetime import datetime
 
-from sqlalchemy import func, and_, or_, desc, text
+from sqlalchemy import func, and_, or_, desc, text, case
 from sqlalchemy.orm import Session, aliased
 
-from models.event import Event
-from models.llm_interaction import LLMInteraction
-from analysis.interface import (
+from src.models.event import Event
+from src.models.llm_interaction import LLMInteraction
+from src.analysis.interface import (
     AnalysisInterface, 
     TimeSeriesParams, 
     MetricParams,
@@ -20,7 +20,7 @@ from analysis.interface import (
     QueryResult,
     PaginationParams
 )
-from analysis.utils import (
+from src.analysis.utils import (
     calculate_token_cost,
     format_time_series_data,
     sql_time_bucket,

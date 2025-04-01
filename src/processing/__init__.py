@@ -1,10 +1,12 @@
 """
-Processing package for the Cylestio Local Server.
+Processing module for telemetry data.
 
-This package handles event data processing, validation,
-transformation, and storage.
+This module provides the processing capabilities for the Cylestio Local Server,
+handling telemetry events from various sources.
 """
 
-from processing.simple_processor import SimpleProcessor, ProcessingError
+# Import processors
+from src.processing.simple_processor import SimpleProcessor, ProcessingError
 
-__all__ = ['SimpleProcessor', 'ProcessingError'] 
+# Define all classes that should be imported from this module
+__all__ = ["SimpleProcessor", "ProcessingError"] 

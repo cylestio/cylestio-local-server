@@ -11,7 +11,7 @@ import uuid
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, func
 from sqlalchemy.orm import relationship
 
-from models.base import Base
+from src.models.base import Base
 
 
 class Session(Base):
@@ -168,7 +168,7 @@ class Session(Base):
         Returns:
             int: The total number of events
         """
-        from models.event import Event
+        from src.models.event import Event
         
         return db_session.query(func.count(Event.id)).filter(
             Event.session_id == self.id
@@ -185,7 +185,7 @@ class Session(Base):
         Returns:
             List[Event]: Events of the specified type
         """
-        from models.event import Event
+        from src.models.event import Event
         
         return db_session.query(Event).filter(
             Event.session_id == self.id,
@@ -202,8 +202,8 @@ class Session(Base):
         Returns:
             List[Trace]: Traces containing events from this session
         """
-        from models.trace import Trace
-        from models.event import Event
+        from src.models.trace import Trace
+        from src.models.event import Event
         
         # Get unique trace_ids for this session
         trace_ids_query = db_session.query(Event.trace_id).filter(
@@ -231,7 +231,7 @@ class Session(Base):
         Returns:
             Dict: Statistics about the session
         """
-        from models.event import Event
+        from src.models.event import Event
         
         event_count = self.get_event_count(db_session)
         
@@ -266,7 +266,7 @@ class Session(Base):
         Returns:
             List[Event]: Events sorted by timestamp
         """
-        from models.event import Event
+        from src.models.event import Event
         
         return db_session.query(Event).filter(
             Event.session_id == self.session_id

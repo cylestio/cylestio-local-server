@@ -10,8 +10,8 @@ import sqlalchemy as sa
 from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy.orm import relationship
 
-from models.base import Base
-from models.event import Event
+from src.models.base import Base
+from src.models.event import Event
 
 from typing import Dict, Any, Optional, List, Tuple
 
@@ -64,18 +64,20 @@ class ToolInteraction(Base):
         return f"<ToolInteraction {self.id} ({self.tool_name})>"
     
     @classmethod
-    def from_event(cls, db_session, event, event_data=None) -> "ToolInteraction":
+    def from_event(cls, db_session, event: Event, event_data: Dict[str, Any]) -> Optional["ToolInteraction"]:
         """
-        Create a ToolInteraction from an event.
+        Create a ToolInteraction from an Event object.
         
         Args:
             db_session: Database session
-            event: The parent Event object
-            event_data: Optional event data dictionary
+            event: The event object
+            event_data: The raw event data
             
         Returns:
-            ToolInteraction: The created tool interaction
+            ToolInteraction or None: The created tool interaction, or None if creation failed
         """
+        from src.models.event import Event
+        
         # Find the event attributes
         attributes = event_data.get("attributes", {}) if event_data else {}
         if hasattr(event, "attributes"):
@@ -156,7 +158,7 @@ class ToolInteraction(Base):
         # that shares the same span_id
         if event.name in ["tool.result", "tool.call.finish", "tool.call.error"] and event.span_id:
             # Find the execution interaction with the same span_id
-            from models.event import Event
+            from src.models.event import Event
             
             # Look for the execution event with the same span_id
             execution_event = db_session.query(Event).filter(
@@ -354,7 +356,7 @@ class ToolInteraction(Base):
             List of tuples containing (execution_interaction, result_interaction)
             If a result interaction isn't found, the second element will be None
         """
-        from models.event import Event
+        from src.models.event import Event
         
         # Get all execution interactions
         execution_interactions = db_session.query(cls).join(Event).filter(

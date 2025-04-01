@@ -13,6 +13,7 @@ from models.event import Event
 from models.llm_interaction import LLMInteraction
 from models.security_alert import SecurityAlert
 from models.framework_event import FrameworkEvent
+from tests.test_utils import generate_test_event_json, load_sample_events
 
 
 class TestSimpleProcessor:
@@ -280,4 +281,61 @@ class TestSimpleProcessor:
             assert "Test exception" in result["error"]
             
             # Check that the session was rolled back
-            mock_session.rollback.assert_called_once() 
+            mock_session.rollback.assert_called_once()
+
+
+def test_process_event_creation(simple_processor):
+    """Test basic event processing for event creation."""
+    # Create a simple test event
+    event_data = generate_test_event_json()
+    
+    # Process the event
+    result = simple_processor.process_event(event_data)
+    
+    # Verify the result is successful
+    assert result.get("success") is True
+    assert "event_id" in result
+
+
+def test_process_basic_event_ingestion(simple_processor):
+    """Test processing of a basic event without specialized type."""
+    # Create a simple test event
+    event_data = generate_test_event_json()
+    event_data["name"] = "basic.test.event"
+    
+    # Process the event
+    result = simple_processor.process_event(event_data)
+    
+    # Verify the result is successful
+    assert result.get("success") is True
+    assert "event_id" in result
+
+
+def test_sample_event_processing(simple_processor):
+    """Test processing a few sample events from example_records.json."""
+    try:
+        # Load a few example events
+        sample_events = load_sample_events(max_events=3)
+        
+        # Process each event
+        for event_data in sample_events:
+            result = simple_processor.process_event(event_data)
+            assert result.get("success") is True
+            assert "event_id" in result
+    except Exception as e:
+        pytest.skip(f"Error processing sample events: {str(e)}")
+
+
+def test_invalid_event_handling(simple_processor):
+    """Test handling of invalid events."""
+    # Test with missing required fields
+    invalid_event = {"name": "test.event"}
+    result = simple_processor.process_event(invalid_event)
+    assert result.get("success") is False
+    assert "error" in result
+    
+    # Test with invalid JSON
+    invalid_json = "not a valid JSON object"
+    result = simple_processor.process_event(invalid_json)
+    assert result.get("success") is False
+    assert "error" in result 

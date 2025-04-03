@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
 # Import routes
-from src.api.routes import telemetry, metrics, health
+from src.api.routes import telemetry, metrics, health, agents
 from src.api.middleware.error_handler import add_error_handlers
 
 def create_api_app() -> FastAPI:
@@ -32,6 +32,7 @@ def create_api_app() -> FastAPI:
     app.include_router(health.router, prefix="/v1", tags=["Health"])
     app.include_router(telemetry.router, prefix="/v1", tags=["Telemetry"])
     app.include_router(metrics.router, prefix="/v1", tags=["Metrics"])
+    app.include_router(agents.router, prefix="/v1", tags=["Agents"])
     
     # Custom OpenAPI schema
     def custom_openapi():

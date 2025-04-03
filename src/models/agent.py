@@ -260,13 +260,14 @@ class Agent(Base):
         """
         from src.models.event import Event
         from src.models.llm_interaction import LLMInteraction
+        from sqlalchemy import func
         
         query = db_session.query(
             LLMInteraction.model,
-            db_session.func.sum(LLMInteraction.input_tokens).label('total_input_tokens'),
-            db_session.func.sum(LLMInteraction.output_tokens).label('total_output_tokens'),
-            db_session.func.sum(LLMInteraction.total_tokens).label('total_tokens'),
-            db_session.func.count(LLMInteraction.id).label('call_count')
+            func.sum(LLMInteraction.input_tokens).label('total_input_tokens'),
+            func.sum(LLMInteraction.output_tokens).label('total_output_tokens'),
+            func.sum(LLMInteraction.total_tokens).label('total_tokens'),
+            func.count(LLMInteraction.id).label('call_count')
         ).join(
             Event, LLMInteraction.event_id == Event.id
         ).filter(
@@ -307,10 +308,11 @@ class Agent(Base):
         """
         from src.models.event import Event
         from src.models.tool_interaction import ToolInteraction
+        from sqlalchemy import func
         
         query = db_session.query(
             ToolInteraction.tool_name,
-            db_session.func.count(ToolInteraction.id).label('usage_count')
+            func.count(ToolInteraction.id).label('usage_count')
         ).join(
             Event, ToolInteraction.event_id == Event.id
         ).filter(
@@ -343,10 +345,11 @@ class Agent(Base):
         """
         from src.models.event import Event
         from src.models.security_alert import SecurityAlert
+        from sqlalchemy import func
         
         query = db_session.query(
             SecurityAlert.alert_level,
-            db_session.func.count(SecurityAlert.id).label('alert_count')
+            func.count(SecurityAlert.id).label('alert_count')
         ).join(
             Event, SecurityAlert.event_id == Event.id
         ).filter(

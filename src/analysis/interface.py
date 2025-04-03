@@ -296,10 +296,20 @@ class DashboardResponse:
     
     Attributes:
         period: Description of the time period
+        time_range: Time range for the metrics
+        from_time: Start time of the metrics
+        to_time: End time of the metrics
+        agent_id: Optional agent ID to filter by
         metrics: List of metric summaries
+        error: Optional error message
     """
     period: str
+    time_range: str
+    from_time: Optional[str] = None
+    to_time: Optional[str] = None
+    agent_id: Optional[str] = None
     metrics: List[MetricSummary] = field(default_factory=list)
+    error: Optional[str] = None
 
 
 class AnalysisInterface:
@@ -541,67 +551,87 @@ def get_dashboard_metrics(time_range: TimeRange, agent_id: Optional[str], db: Se
     # Calculate time range
     to_time = datetime.utcnow()
     
+    # Convert the time_range to string for comparison if it's an enum
+    time_range_str = time_range.value if hasattr(time_range, 'value') else str(time_range)
+    
     # Handle all possible time range values
-    if time_range == TimeRange.HOUR:
+    if time_range_str in ["hour", "1h"]:
         from_time = to_time - timedelta(hours=1)
         prev_from_time = from_time - timedelta(hours=1)
         period = "1 hour"
-    elif time_range == TimeRange.DAY:
+    elif time_range_str in ["day", "1d"]:
         from_time = to_time - timedelta(days=1)
         prev_from_time = from_time - timedelta(days=1)
         period = "24 hours"
-    elif time_range == TimeRange.WEEK:
+    elif time_range_str in ["week", "7d"]:
         from_time = to_time - timedelta(days=7)
         prev_from_time = from_time - timedelta(days=7)
         period = "7 days"
-    elif time_range == TimeRange.MONTH:
+    elif time_range_str in ["month", "30d"]:
         from_time = to_time - timedelta(days=30)
         prev_from_time = from_time - timedelta(days=30)
         period = "30 days"
     else:
         # Default to 24 hours if an unknown time range is provided
-        logger.warning(f"Unknown time range: {time_range}, defaulting to 24 hours")
+        logger.warning(f"Unknown time range: {time_range_str}, defaulting to 24 hours")
         from_time = to_time - timedelta(days=1)
         prev_from_time = from_time - timedelta(days=1)
         period = "24 hours"
     
-    # Get current metrics
-    metrics = []
-    
-    # LLM request count
-    request_count = get_llm_request_total(db, from_time, to_time, agent_id)
-    prev_request_count = get_llm_request_total(db, prev_from_time, from_time, agent_id)
-    metrics.append(create_metric_summary("llm_request_count", request_count, prev_request_count))
-    
-    # Token usage
-    token_usage = get_llm_token_total(db, from_time, to_time, agent_id)
-    prev_token_usage = get_llm_token_total(db, prev_from_time, from_time, agent_id)
-    metrics.append(create_metric_summary("llm_token_usage", token_usage, prev_token_usage))
-    
-    # Average response time
-    avg_response_time = get_llm_avg_response_time(db, from_time, to_time, agent_id)
-    prev_avg_response_time = get_llm_avg_response_time(db, prev_from_time, from_time, agent_id)
-    metrics.append(create_metric_summary("llm_avg_response_time", avg_response_time, prev_avg_response_time))
-    
-    # Tool execution count
-    tool_count = get_tool_execution_total(db, from_time, to_time, agent_id)
-    prev_tool_count = get_tool_execution_total(db, prev_from_time, from_time, agent_id)
-    metrics.append(create_metric_summary("tool_execution_count", tool_count, prev_tool_count))
-    
-    # Error count
-    error_count = get_error_total(db, from_time, to_time, agent_id)
-    prev_error_count = get_error_total(db, prev_from_time, from_time, agent_id)
-    metrics.append(create_metric_summary("error_count", error_count, prev_error_count))
-    
-    # Session count
-    session_count = get_session_total(db, from_time, to_time, agent_id)
-    prev_session_count = get_session_total(db, prev_from_time, from_time, agent_id)
-    metrics.append(create_metric_summary("session_count", session_count, prev_session_count))
-    
-    return DashboardResponse(
-        period=period,
-        metrics=metrics
-    )
+    try:
+        # Get current metrics
+        metrics = []
+        
+        # LLM request count
+        request_count = get_llm_request_total(db, from_time, to_time, agent_id)
+        prev_request_count = get_llm_request_total(db, prev_from_time, from_time, agent_id)
+        metrics.append(create_metric_summary("llm_request_count", request_count, prev_request_count))
+        
+        # Token usage
+        token_usage = get_llm_token_total(db, from_time, to_time, agent_id)
+        prev_token_usage = get_llm_token_total(db, prev_from_time, from_time, agent_id)
+        metrics.append(create_metric_summary("llm_token_usage", token_usage, prev_token_usage))
+        
+        # Average response time
+        avg_response_time = get_llm_avg_response_time(db, from_time, to_time, agent_id)
+        prev_avg_response_time = get_llm_avg_response_time(db, prev_from_time, from_time, agent_id)
+        metrics.append(create_metric_summary("llm_avg_response_time", avg_response_time, prev_avg_response_time))
+        
+        # Tool execution count
+        tool_count = get_tool_execution_total(db, from_time, to_time, agent_id)
+        prev_tool_count = get_tool_execution_total(db, prev_from_time, from_time, agent_id)
+        metrics.append(create_metric_summary("tool_execution_count", tool_count, prev_tool_count))
+        
+        # Error count
+        error_count = get_error_total(db, from_time, to_time, agent_id)
+        prev_error_count = get_error_total(db, prev_from_time, from_time, agent_id)
+        metrics.append(create_metric_summary("error_count", error_count, prev_error_count))
+        
+        # Session count
+        session_count = get_session_total(db, from_time, to_time, agent_id)
+        prev_session_count = get_session_total(db, prev_from_time, from_time, agent_id)
+        metrics.append(create_metric_summary("session_count", session_count, prev_session_count))
+        
+        return DashboardResponse(
+            period=period,
+            time_range=time_range.value,
+            from_time=from_time.isoformat(),
+            to_time=to_time.isoformat(),
+            agent_id=agent_id,
+            metrics=metrics
+        )
+    except Exception as e:
+        logger.error(f"Error generating dashboard metrics: {str(e)}", exc_info=True)
+        # Return an empty response with error info
+        return DashboardResponse(
+            period=period,
+            time_range=time_range.value,
+            from_time=from_time.isoformat() if from_time else None,
+            to_time=to_time.isoformat() if to_time else None,
+            agent_id=agent_id,
+            metrics=[],
+            error=str(e)
+        )
 
 def create_metric_summary(metric: str, value: Union[int, float], prev_value: Union[int, float]) -> MetricSummary:
     """
@@ -615,21 +645,29 @@ def create_metric_summary(metric: str, value: Union[int, float], prev_value: Uni
     Returns:
         MetricSummary: Metric summary
     """
+    # Ensure we have numeric values
+    value = value or 0
+    prev_value = prev_value or 0
+    
     # Calculate change percentage
-    if prev_value and prev_value > 0:
+    if prev_value > 0:
         change = ((value - prev_value) / prev_value) * 100
+        change = round(change, 1)  # Round to 1 decimal place
     else:
-        change = None
+        # If previous value is zero or None, we can't calculate percentage change
+        change = 0.0 if value == 0 else 100.0  # If current value exists but prev doesn't, consider it 100% increase
         
     # Determine trend
-    if change is None:
-        trend = None
+    if value == 0 and prev_value == 0:
+        trend = "flat"  # Both zero means flat trend
     elif change > 5:
         trend = "up"
     elif change < -5:
         trend = "down"
     else:
         trend = "flat"
+        
+    logger.debug(f"Metric summary for {metric}: value={value}, prev_value={prev_value}, change={change}%, trend={trend}")
         
     return MetricSummary(
         metric=metric,
@@ -644,38 +682,505 @@ def create_metric_summary(metric: str, value: Union[int, float], prev_value: Uni
 def get_llm_request_count(db: Session, from_time: datetime, to_time: datetime, 
                         agent_id: Optional[str] = None, interval: Optional[str] = None, 
                         dimensions: Optional[List[str]] = None) -> List[MetricDataPoint]:
-    """Placeholder for LLM request count metrics"""
-    # Placeholder implementation
-    return [
-        MetricDataPoint(timestamp=datetime.utcnow(), value=100)
-    ]
+    """
+    Get LLM request count metrics from the database.
+    
+    Args:
+        db: Database session
+        from_time: Start time for the query range
+        to_time: End time for the query range
+        agent_id: Optional agent ID to filter by
+        interval: Optional time interval for aggregation
+        dimensions: Optional dimensions to group by
+        
+    Returns:
+        List[MetricDataPoint]: LLM request count data points
+    """
+    from src.models.event import Event
+    from src.models.llm_interaction import LLMInteraction
+    from src.analysis.utils import sql_time_bucket
+    
+    # Determine interval for time bucketing
+    time_interval = interval or "day"
+    if interval == "1m":
+        time_interval = "minute"
+    elif interval == "1h":
+        time_interval = "hour"
+    elif interval == "1d":
+        time_interval = "day"
+    elif interval == "7d":
+        time_interval = "week"
+    
+    logger.debug(f"Using time interval: {time_interval} for LLM request count")
+    
+    try:
+        # Base query with time buckets
+        query = db.query(
+            sql_time_bucket(Event.timestamp, time_interval).label('time_bucket'),
+            func.count(LLMInteraction.id).label('request_count')
+        )
+        
+        # Add joins
+        query = query.select_from(LLMInteraction)
+        query = query.join(Event, LLMInteraction.event_id == Event.id)
+        
+        # Apply filters
+        query = query.filter(
+            LLMInteraction.interaction_type == 'finish',
+            Event.timestamp >= from_time,
+            Event.timestamp <= to_time
+        )
+        
+        # Apply agent filter if provided
+        if agent_id:
+            query = query.filter(Event.agent_id == agent_id)
+            
+        # Handle dimensions if provided
+        group_by = ['time_bucket']
+        dimension_columns = {}
+        
+        if dimensions:
+            for dim in dimensions:
+                if dim == 'agent_id':
+                    dimension_columns['agent_id'] = Event.agent_id
+                    group_by.append('agent_id')
+                elif dim == 'model':
+                    dimension_columns['model'] = LLMInteraction.model
+                    group_by.append('model')
+        
+        # Add dimension columns to query
+        if dimension_columns:
+            for dim_name, dim_col in dimension_columns.items():
+                query = query.add_columns(dim_col.label(dim_name))
+                
+        # Group by time bucket and dimensions
+        query = query.group_by(*group_by)
+        
+        # Order by time
+        query = query.order_by('time_bucket')
+        
+        # Execute query
+        results = query.all()
+        
+        # Convert to data points
+        data_points = []
+        for row in results:
+            dimensions_dict = {}
+            if dimension_columns:
+                for dim_name in dimension_columns.keys():
+                    dimensions_dict[dim_name] = getattr(row, dim_name)
+                    
+            data_points.append(
+                MetricDataPoint(
+                    timestamp=row.time_bucket,
+                    value=row.request_count,
+                    dimensions=dimensions_dict
+                )
+            )
+            
+        logger.debug(f"Found {len(data_points)} data points for LLM request count")
+        
+        # If no data points were found, return a single data point with count 0
+        if not data_points:
+            logger.debug("No LLM request data found, returning single zero data point")
+            data_points.append(
+                MetricDataPoint(
+                    timestamp=from_time + (to_time - from_time) / 2,
+                    value=0,
+                    dimensions={}
+                )
+            )
+            
+        return data_points
+        
+    except Exception as e:
+        logger.error(f"Error in get_llm_request_count: {str(e)}", exc_info=True)
+        # Return a single data point with value 0 on error
+        return [
+            MetricDataPoint(
+                timestamp=from_time + (to_time - from_time) / 2,
+                value=0,
+                dimensions={}
+            )
+        ]
 
 def get_llm_token_usage(db: Session, from_time: datetime, to_time: datetime, 
                       agent_id: Optional[str] = None, interval: Optional[str] = None, 
                       dimensions: Optional[List[str]] = None) -> List[MetricDataPoint]:
-    """Placeholder for LLM token usage metrics"""
-    # Placeholder implementation
-    return [
-        MetricDataPoint(timestamp=datetime.utcnow(), value=10000)
-    ]
+    """
+    Get LLM token usage metrics from the database.
+    
+    Args:
+        db: Database session
+        from_time: Start time for the query range
+        to_time: End time for the query range
+        agent_id: Optional agent ID to filter by
+        interval: Optional time interval for aggregation
+        dimensions: Optional dimensions to group by
+        
+    Returns:
+        List[MetricDataPoint]: LLM token usage data points
+    """
+    from src.models.event import Event
+    from src.models.llm_interaction import LLMInteraction
+    from src.analysis.utils import sql_time_bucket
+    
+    # Determine interval for time bucketing
+    time_interval = interval or "day"
+    if interval == "1m":
+        time_interval = "minute"
+    elif interval == "1h":
+        time_interval = "hour"
+    elif interval == "1d":
+        time_interval = "day"
+    elif interval == "7d":
+        time_interval = "week"
+    
+    logger.debug(f"Using time interval: {time_interval} for LLM token usage")
+    
+    try:
+        # Base query with time buckets
+        query = db.query(
+            sql_time_bucket(Event.timestamp, time_interval).label('time_bucket'),
+            func.sum(LLMInteraction.total_tokens).label('token_count')
+        )
+        
+        # Add joins
+        query = query.select_from(LLMInteraction)
+        query = query.join(Event, LLMInteraction.event_id == Event.id)
+        
+        # Apply filters
+        query = query.filter(
+            LLMInteraction.interaction_type == 'finish',
+            Event.timestamp >= from_time,
+            Event.timestamp <= to_time
+        )
+        
+        # Apply agent filter if provided
+        if agent_id:
+            query = query.filter(Event.agent_id == agent_id)
+            
+        # Handle dimensions if provided
+        group_by = ['time_bucket']
+        dimension_columns = {}
+        
+        if dimensions:
+            for dim in dimensions:
+                if dim == 'agent_id':
+                    dimension_columns['agent_id'] = Event.agent_id
+                    group_by.append('agent_id')
+                elif dim == 'model':
+                    dimension_columns['model'] = LLMInteraction.model
+                    group_by.append('model')
+        
+        # Add dimension columns to query
+        if dimension_columns:
+            for dim_name, dim_col in dimension_columns.items():
+                query = query.add_columns(dim_col.label(dim_name))
+                
+        # Group by time bucket and dimensions
+        query = query.group_by(*group_by)
+        
+        # Order by time
+        query = query.order_by('time_bucket')
+        
+        # Execute query
+        results = query.all()
+        
+        # Convert to data points
+        data_points = []
+        for row in results:
+            dimensions_dict = {}
+            if dimension_columns:
+                for dim_name in dimension_columns.keys():
+                    dimensions_dict[dim_name] = getattr(row, dim_name)
+                    
+            data_points.append(
+                MetricDataPoint(
+                    timestamp=row.time_bucket,
+                    value=row.token_count or 0,  # Handle None values
+                    dimensions=dimensions_dict
+                )
+            )
+            
+        logger.debug(f"Found {len(data_points)} data points for LLM token usage")
+        
+        # If no data points were found, return a single data point with count 0
+        if not data_points:
+            logger.debug("No LLM token usage data found, returning single zero data point")
+            data_points.append(
+                MetricDataPoint(
+                    timestamp=from_time + (to_time - from_time) / 2,
+                    value=0,
+                    dimensions={}
+                )
+            )
+            
+        return data_points
+        
+    except Exception as e:
+        logger.error(f"Error in get_llm_token_usage: {str(e)}", exc_info=True)
+        # Return a single data point with value 0 on error
+        return [
+            MetricDataPoint(
+                timestamp=from_time + (to_time - from_time) / 2,
+                value=0,
+                dimensions={}
+            )
+        ]
 
 def get_llm_response_time(db: Session, from_time: datetime, to_time: datetime, 
                         agent_id: Optional[str] = None, interval: Optional[str] = None, 
                         dimensions: Optional[List[str]] = None) -> List[MetricDataPoint]:
-    """Placeholder for LLM response time metrics"""
-    # Placeholder implementation
-    return [
-        MetricDataPoint(timestamp=datetime.utcnow(), value=1500)
-    ]
+    """
+    Get LLM response time metrics from the database.
+    
+    Args:
+        db: Database session
+        from_time: Start time for the query range
+        to_time: End time for the query range
+        agent_id: Optional agent ID to filter by
+        interval: Optional time interval for aggregation
+        dimensions: Optional dimensions to group by
+        
+    Returns:
+        List[MetricDataPoint]: LLM response time data points (average in ms)
+    """
+    from src.models.event import Event
+    from src.models.llm_interaction import LLMInteraction
+    from src.analysis.utils import sql_time_bucket
+    
+    # Determine interval for time bucketing
+    time_interval = interval or "day"
+    if interval == "1m":
+        time_interval = "minute"
+    elif interval == "1h":
+        time_interval = "hour"
+    elif interval == "1d":
+        time_interval = "day"
+    elif interval == "7d":
+        time_interval = "week"
+    
+    logger.debug(f"Using time interval: {time_interval} for LLM response time")
+    
+    try:
+        # Base query with time buckets
+        query = db.query(
+            sql_time_bucket(Event.timestamp, time_interval).label('time_bucket'),
+            func.avg(LLMInteraction.duration_ms).label('avg_duration')
+        )
+        
+        # Add joins
+        query = query.select_from(LLMInteraction)
+        query = query.join(Event, LLMInteraction.event_id == Event.id)
+        
+        # Apply filters
+        query = query.filter(
+            LLMInteraction.interaction_type == 'finish',
+            LLMInteraction.duration_ms.isnot(None),  # Ensure duration is not null
+            Event.timestamp >= from_time,
+            Event.timestamp <= to_time
+        )
+        
+        # Apply agent filter if provided
+        if agent_id:
+            query = query.filter(Event.agent_id == agent_id)
+            
+        # Handle dimensions if provided
+        group_by = ['time_bucket']
+        dimension_columns = {}
+        
+        if dimensions:
+            for dim in dimensions:
+                if dim == 'agent_id':
+                    dimension_columns['agent_id'] = Event.agent_id
+                    group_by.append('agent_id')
+                elif dim == 'model':
+                    dimension_columns['model'] = LLMInteraction.model
+                    group_by.append('model')
+        
+        # Add dimension columns to query
+        if dimension_columns:
+            for dim_name, dim_col in dimension_columns.items():
+                query = query.add_columns(dim_col.label(dim_name))
+                
+        # Group by time bucket and dimensions
+        query = query.group_by(*group_by)
+        
+        # Order by time
+        query = query.order_by('time_bucket')
+        
+        # Execute query
+        results = query.all()
+        
+        # Convert to data points
+        data_points = []
+        for row in results:
+            dimensions_dict = {}
+            if dimension_columns:
+                for dim_name in dimension_columns.keys():
+                    dimensions_dict[dim_name] = getattr(row, dim_name)
+                    
+            data_points.append(
+                MetricDataPoint(
+                    timestamp=row.time_bucket,
+                    value=float(row.avg_duration) if row.avg_duration is not None else 0.0,
+                    dimensions=dimensions_dict
+                )
+            )
+            
+        logger.debug(f"Found {len(data_points)} data points for LLM response time")
+        
+        # If no data points were found, return a single data point with value 0
+        if not data_points:
+            logger.debug("No LLM response time data found, returning single zero data point")
+            data_points.append(
+                MetricDataPoint(
+                    timestamp=from_time + (to_time - from_time) / 2,
+                    value=0.0,
+                    dimensions={}
+                )
+            )
+            
+        return data_points
+        
+    except Exception as e:
+        logger.error(f"Error in get_llm_response_time: {str(e)}", exc_info=True)
+        # Return a single data point with value 0 on error
+        return [
+            MetricDataPoint(
+                timestamp=from_time + (to_time - from_time) / 2,
+                value=0.0,
+                dimensions={}
+            )
+        ]
 
 def get_tool_execution_count(db: Session, from_time: datetime, to_time: datetime, 
                            agent_id: Optional[str] = None, interval: Optional[str] = None, 
                            dimensions: Optional[List[str]] = None) -> List[MetricDataPoint]:
-    """Placeholder for tool execution count metrics"""
-    # Placeholder implementation
-    return [
-        MetricDataPoint(timestamp=datetime.utcnow(), value=50)
-    ]
+    """
+    Get tool execution count metrics from the database.
+    
+    Args:
+        db: Database session
+        from_time: Start time for the query range
+        to_time: End time for the query range
+        agent_id: Optional agent ID to filter by
+        interval: Optional time interval for aggregation
+        dimensions: Optional dimensions to group by
+        
+    Returns:
+        List[MetricDataPoint]: Tool execution count data points
+    """
+    from src.models.event import Event
+    from src.models.tool_interaction import ToolInteraction
+    from src.analysis.utils import sql_time_bucket
+    
+    # Determine interval for time bucketing
+    time_interval = interval or "day"
+    if interval == "1m":
+        time_interval = "minute"
+    elif interval == "1h":
+        time_interval = "hour"
+    elif interval == "1d":
+        time_interval = "day"
+    elif interval == "7d":
+        time_interval = "week"
+    
+    logger.debug(f"Using time interval: {time_interval} for tool execution count")
+    
+    try:
+        # Base query with time buckets
+        query = db.query(
+            sql_time_bucket(Event.timestamp, time_interval).label('time_bucket'),
+            func.count(ToolInteraction.id).label('tool_count')
+        )
+        
+        # Add joins
+        query = query.select_from(ToolInteraction)
+        query = query.join(Event, ToolInteraction.event_id == Event.id)
+        
+        # Apply filters
+        query = query.filter(
+            Event.timestamp >= from_time,
+            Event.timestamp <= to_time
+        )
+        
+        # Apply agent filter if provided
+        if agent_id:
+            query = query.filter(Event.agent_id == agent_id)
+            
+        # Handle dimensions if provided
+        group_by = ['time_bucket']
+        dimension_columns = {}
+        
+        if dimensions:
+            for dim in dimensions:
+                if dim == 'agent_id':
+                    dimension_columns['agent_id'] = Event.agent_id
+                    group_by.append('agent_id')
+                elif dim == 'tool_name':
+                    dimension_columns['tool_name'] = ToolInteraction.tool_name
+                    group_by.append('tool_name')
+                elif dim == 'status':
+                    dimension_columns['status'] = ToolInteraction.status
+                    group_by.append('status')
+        
+        # Add dimension columns to query
+        if dimension_columns:
+            for dim_name, dim_col in dimension_columns.items():
+                query = query.add_columns(dim_col.label(dim_name))
+                
+        # Group by time bucket and dimensions
+        query = query.group_by(*group_by)
+        
+        # Order by time
+        query = query.order_by('time_bucket')
+        
+        # Execute query
+        results = query.all()
+        
+        # Convert to data points
+        data_points = []
+        for row in results:
+            dimensions_dict = {}
+            if dimension_columns:
+                for dim_name in dimension_columns.keys():
+                    dimensions_dict[dim_name] = getattr(row, dim_name)
+                    
+            data_points.append(
+                MetricDataPoint(
+                    timestamp=row.time_bucket,
+                    value=row.tool_count,
+                    dimensions=dimensions_dict
+                )
+            )
+            
+        logger.debug(f"Found {len(data_points)} data points for tool execution count")
+        
+        # If no data points were found, return a single data point with count 0
+        if not data_points:
+            logger.debug("No tool execution data found, returning single zero data point")
+            data_points.append(
+                MetricDataPoint(
+                    timestamp=from_time + (to_time - from_time) / 2,
+                    value=0,
+                    dimensions={}
+                )
+            )
+            
+        return data_points
+        
+    except Exception as e:
+        logger.error(f"Error in get_tool_execution_count: {str(e)}", exc_info=True)
+        # Return a single data point with value 0 on error
+        return [
+            MetricDataPoint(
+                timestamp=from_time + (to_time - from_time) / 2,
+                value=0,
+                dimensions={}
+            )
+        ]
 
 def get_tool_success_rate(db: Session, from_time: datetime, to_time: datetime, 
                         agent_id: Optional[str] = None, interval: Optional[str] = None, 
@@ -803,11 +1308,125 @@ def get_tool_success_rate(db: Session, from_time: datetime, to_time: datetime,
 def get_error_count(db: Session, from_time: datetime, to_time: datetime, 
                   agent_id: Optional[str] = None, interval: Optional[str] = None, 
                   dimensions: Optional[List[str]] = None) -> List[MetricDataPoint]:
-    """Placeholder for error count metrics"""
-    # Placeholder implementation
-    return [
-        MetricDataPoint(timestamp=datetime.utcnow(), value=5)
-    ]
+    """
+    Get error count metrics from the database.
+    
+    Args:
+        db: Database session
+        from_time: Start time for the query range
+        to_time: End time for the query range
+        agent_id: Optional agent ID to filter by
+        interval: Optional time interval for aggregation
+        dimensions: Optional dimensions to group by
+        
+    Returns:
+        List[MetricDataPoint]: Error count data points
+    """
+    from src.models.event import Event
+    from src.analysis.utils import sql_time_bucket
+    
+    # Determine interval for time bucketing
+    time_interval = interval or "day"
+    if interval == "1m":
+        time_interval = "minute"
+    elif interval == "1h":
+        time_interval = "hour"
+    elif interval == "1d":
+        time_interval = "day"
+    elif interval == "7d":
+        time_interval = "week"
+    
+    logger.debug(f"Using time interval: {time_interval} for error count")
+    
+    try:
+        # Base query with time buckets
+        query = db.query(
+            sql_time_bucket(Event.timestamp, time_interval).label('time_bucket'),
+            func.count(Event.id).label('error_count')
+        )
+        
+        # Add the FROM clause
+        query = query.select_from(Event)
+        
+        # Apply filters
+        query = query.filter(
+            Event.level == "error",
+            Event.timestamp >= from_time,
+            Event.timestamp <= to_time
+        )
+        
+        # Apply agent filter if provided
+        if agent_id:
+            query = query.filter(Event.agent_id == agent_id)
+            
+        # Handle dimensions if provided
+        group_by = ['time_bucket']
+        dimension_columns = {}
+        
+        if dimensions:
+            for dim in dimensions:
+                if dim == 'agent_id':
+                    dimension_columns['agent_id'] = Event.agent_id
+                    group_by.append('agent_id')
+                elif dim == 'error_type':
+                    dimension_columns['error_type'] = Event.name
+                    group_by.append('error_type')
+        
+        # Add dimension columns to query
+        if dimension_columns:
+            for dim_name, dim_col in dimension_columns.items():
+                query = query.add_columns(dim_col.label(dim_name))
+                
+        # Group by time bucket and dimensions
+        query = query.group_by(*group_by)
+        
+        # Order by time
+        query = query.order_by('time_bucket')
+        
+        # Execute query
+        results = query.all()
+        
+        # Convert to data points
+        data_points = []
+        for row in results:
+            dimensions_dict = {}
+            if dimension_columns:
+                for dim_name in dimension_columns.keys():
+                    dimensions_dict[dim_name] = getattr(row, dim_name)
+                    
+            data_points.append(
+                MetricDataPoint(
+                    timestamp=row.time_bucket,
+                    value=row.error_count,
+                    dimensions=dimensions_dict
+                )
+            )
+            
+        logger.debug(f"Found {len(data_points)} data points for error count")
+        
+        # If no data points were found, return a single data point with count 0
+        if not data_points:
+            logger.debug("No error data found, returning single zero data point")
+            data_points.append(
+                MetricDataPoint(
+                    timestamp=from_time + (to_time - from_time) / 2,
+                    value=0,
+                    dimensions={}
+                )
+            )
+            
+        return data_points
+        
+    except Exception as e:
+        logger.error(f"Error in get_error_count: {str(e)}", exc_info=True)
+        # Return a single data point with value 0 on error
+        return [
+            MetricDataPoint(
+                timestamp=from_time + (to_time - from_time) / 2,
+                value=0,
+                dimensions={}
+            )
+        ]
 
 def get_session_count(db: Session, from_time: datetime, to_time: datetime, 
                     agent_id: Optional[str] = None, interval: Optional[str] = None, 
@@ -854,36 +1473,234 @@ def get_session_count(db: Session, from_time: datetime, to_time: datetime,
 
 def get_llm_request_total(db: Session, from_time: datetime, to_time: datetime, 
                         agent_id: Optional[str] = None) -> int:
-    """Placeholder for total LLM request count"""
-    # Placeholder implementation
-    return 100
+    """
+    Get total LLM request count for the given time period and agent.
+    
+    Args:
+        db: Database session
+        from_time: Start time
+        to_time: End time
+        agent_id: Optional agent ID to filter by
+        
+    Returns:
+        int: Total LLM request count
+    """
+    from src.models.event import Event
+    from src.models.llm_interaction import LLMInteraction
+    
+    # Build the query with explicit joins
+    query = db.query(func.count(LLMInteraction.id))
+    query = query.select_from(LLMInteraction)
+    query = query.join(Event, LLMInteraction.event_id == Event.id)
+    
+    # Apply filters
+    query = query.filter(
+        LLMInteraction.interaction_type == 'finish',
+        Event.timestamp >= from_time,
+        Event.timestamp <= to_time
+    )
+    
+    # Apply agent filter if provided
+    if agent_id:
+        query = query.filter(Event.agent_id == agent_id)
+    
+    # Execute query and return result
+    result = query.scalar() or 0
+    logger.debug(f"LLM request count: {result} for time range {from_time} to {to_time}")
+    return result
 
 def get_llm_token_total(db: Session, from_time: datetime, to_time: datetime, 
-                      agent_id: Optional[str] = None) -> int:
-    """Placeholder for total LLM token usage"""
-    # Placeholder implementation
-    return 10000
+                        agent_id: Optional[str] = None) -> int:
+    """
+    Get total LLM token usage for the given time period and agent.
+    
+    Args:
+        db: Database session
+        from_time: Start time
+        to_time: End time
+        agent_id: Optional agent ID to filter by
+        
+    Returns:
+        int: Total token usage
+    """
+    from src.models.event import Event
+    from src.models.llm_interaction import LLMInteraction
+    
+    # Build the query with explicit joins
+    query = db.query(func.sum(LLMInteraction.total_tokens))
+    query = query.select_from(LLMInteraction)
+    query = query.join(Event, LLMInteraction.event_id == Event.id)
+    
+    # Apply filters
+    query = query.filter(
+        LLMInteraction.interaction_type == 'finish',
+        Event.timestamp >= from_time,
+        Event.timestamp <= to_time
+    )
+    
+    # Apply agent filter if provided
+    if agent_id:
+        query = query.filter(Event.agent_id == agent_id)
+    
+    # Execute query and return result
+    result = query.scalar() or 0
+    logger.debug(f"LLM token usage: {result} for time range {from_time} to {to_time}")
+    return result
 
 def get_llm_avg_response_time(db: Session, from_time: datetime, to_time: datetime, 
                             agent_id: Optional[str] = None) -> float:
-    """Placeholder for average LLM response time"""
-    # Placeholder implementation
-    return 1500.0
+    """
+    Get average LLM response time for the given time period and agent.
+    
+    Args:
+        db: Database session
+        from_time: Start time
+        to_time: End time
+        agent_id: Optional agent ID to filter by
+        
+    Returns:
+        float: Average response time in milliseconds
+    """
+    from src.models.event import Event
+    from src.models.llm_interaction import LLMInteraction
+    
+    # Build the query with explicit joins
+    query = db.query(func.avg(LLMInteraction.duration_ms))
+    query = query.select_from(LLMInteraction)
+    query = query.join(Event, LLMInteraction.event_id == Event.id)
+    
+    # Apply filters
+    query = query.filter(
+        LLMInteraction.interaction_type == 'finish',
+        LLMInteraction.duration_ms.isnot(None),
+        Event.timestamp >= from_time,
+        Event.timestamp <= to_time
+    )
+    
+    # Apply agent filter if provided
+    if agent_id:
+        query = query.filter(Event.agent_id == agent_id)
+    
+    # Execute query and return result
+    avg_time = query.scalar()
+    
+    # Handle case where there's no data
+    if avg_time is None:
+        logger.debug(f"No LLM response time data found for time range {from_time} to {to_time}")
+        return 0.0
+        
+    logger.debug(f"Average LLM response time: {avg_time}ms for time range {from_time} to {to_time}")
+    return float(avg_time)
 
 def get_tool_execution_total(db: Session, from_time: datetime, to_time: datetime, 
                            agent_id: Optional[str] = None) -> int:
-    """Placeholder for total tool execution count"""
-    # Placeholder implementation
-    return 50
+    """
+    Get total tool execution count for the given time period and agent.
+    
+    Args:
+        db: Database session
+        from_time: Start time
+        to_time: End time
+        agent_id: Optional agent ID to filter by
+        
+    Returns:
+        int: Total tool execution count
+    """
+    from src.models.event import Event
+    from src.models.tool_interaction import ToolInteraction
+    
+    # Build the query with explicit joins
+    query = db.query(func.count(ToolInteraction.id))
+    query = query.select_from(ToolInteraction)
+    query = query.join(Event, ToolInteraction.event_id == Event.id)
+    
+    # Apply filters
+    query = query.filter(
+        Event.timestamp >= from_time,
+        Event.timestamp <= to_time
+    )
+    
+    # Apply agent filter if provided
+    if agent_id:
+        query = query.filter(Event.agent_id == agent_id)
+    
+    # Execute query and return result
+    result = query.scalar() or 0
+    logger.debug(f"Tool execution count: {result} for time range {from_time} to {to_time}")
+    return result
 
 def get_error_total(db: Session, from_time: datetime, to_time: datetime, 
                   agent_id: Optional[str] = None) -> int:
-    """Placeholder for total error count"""
-    # Placeholder implementation
-    return 5
+    """
+    Get total error count for the given time period and agent.
+    
+    Args:
+        db: Database session
+        from_time: Start time
+        to_time: End time
+        agent_id: Optional agent ID to filter by
+        
+    Returns:
+        int: Total error count
+    """
+    from src.models.event import Event
+    
+    # Build the query with explicit table reference
+    query = db.query(func.count(Event.id))
+    query = query.select_from(Event)
+    
+    # Apply filters
+    query = query.filter(
+        Event.level == "error",
+        Event.timestamp >= from_time,
+        Event.timestamp <= to_time
+    )
+    
+    # Apply agent filter if provided
+    if agent_id:
+        query = query.filter(Event.agent_id == agent_id)
+    
+    # Execute query and return result
+    result = query.scalar() or 0
+    logger.debug(f"Error count: {result} for time range {from_time} to {to_time}")
+    return result
 
 def get_session_total(db: Session, from_time: datetime, to_time: datetime, 
                     agent_id: Optional[str] = None) -> int:
-    """Placeholder for total session count"""
-    # Placeholder implementation
-    return 25 
+    """
+    Get total session count for the given time period and agent.
+    
+    Args:
+        db: Database session
+        from_time: Start time
+        to_time: End time
+        agent_id: Optional agent ID to filter by
+        
+    Returns:
+        int: Total session count
+    """
+    from src.models.session import Session as SessionModel
+    
+    # Build the query with explicit table reference
+    query = db.query(func.count(SessionModel.id))
+    query = query.select_from(SessionModel)
+    
+    # Apply filters - include sessions that started within the time range
+    # or were active during the time range
+    query = query.filter(
+        SessionModel.start_timestamp >= from_time,
+        # Either session has ended within time range or is still active (null end time)
+        or_(
+            SessionModel.end_timestamp <= to_time,
+            SessionModel.end_timestamp.is_(None)
+        )
+    )
+    
+    # Apply agent filter if provided
+    if agent_id:
+        query = query.filter(SessionModel.agent_id == agent_id)
+    
+    # Execute query and return result
+    result = query.scalar() or 0
+    logger.debug(f"Session count: {result} for time range {from_time} to {to_time}")
+    return result 

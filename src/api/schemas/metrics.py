@@ -92,4 +92,9 @@ class MetricSummary(BaseModel):
 class DashboardResponse(BaseModel):
     """Schema for dashboard summary response"""
     period: str = Field(..., description="Time period for the summary")
-    metrics: List[MetricSummary] = Field(..., description="List of key metrics") 
+    time_range: str = Field(..., description="Time range for the metrics")
+    from_time: str = Field(..., description="Start time of the metrics in ISO format")
+    to_time: str = Field(..., description="End time of the metrics in ISO format")
+    agent_id: Optional[str] = Field(None, description="Optional agent ID filter")
+    metrics: List[MetricSummary] = Field(..., description="List of key metrics")
+    error: Optional[str] = Field(None, description="Optional error message") 

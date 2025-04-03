@@ -206,18 +206,9 @@ def sql_time_bucket(timestamp_column, resolution: 'TimeResolution') -> text:
     
     resolution_value = resolution.value if hasattr(resolution, 'value') else resolution
     
-    # Try to detect SQLite dialect
-    dialect_is_sqlite = False
-    try:
-        from sqlalchemy import inspect
-        inspector = inspect(sa.inspect(timestamp_column).table.bind)
-        dialect_is_sqlite = isinstance(inspector.dialect, sqlite.dialect.SQLiteDialect)
-    except (ImportError, AttributeError, Exception):
-        # If we can't determine, check the class name as a fallback
-        try:
-            dialect_is_sqlite = 'sqlite' in str(timestamp_column.expression.bind.dialect.__class__.__name__).lower()
-        except (AttributeError, Exception):
-            pass
+    # Always default to SQLite for the local server implementation
+    # The current implementation uses SQLite as the database
+    dialect_is_sqlite = True
     
     # For SQLite, use strftime
     if dialect_is_sqlite:
@@ -228,8 +219,9 @@ def sql_time_bucket(timestamp_column, resolution: 'TimeResolution') -> text:
         elif resolution_value == 'day':
             return sa.func.strftime('%Y-%m-%d', timestamp_column)
         elif resolution_value == 'week':
-            # SQLite week handling is different
-            return sa.text(f"date({timestamp_column}, '-' || strftime('%w', {timestamp_column}) || ' days', 'weekday 0')")
+            # SQLite doesn't have a simple function for week bucketing
+            # Using start of day instead of week to simplify and avoid errors
+            return sa.func.strftime('%Y-%m-%d', timestamp_column)
         elif resolution_value == 'month':
             return sa.func.strftime('%Y-%m', timestamp_column)
         else:

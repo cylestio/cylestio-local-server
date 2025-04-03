@@ -26,7 +26,7 @@ async def get_llm_request_count(
     agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
     from_time: Optional[datetime] = Query(None, description="Start time (ISO format)"),
     to_time: Optional[datetime] = Query(None, description="End time (ISO format)"),
-    time_range: Optional[str] = Query("1d", description="Predefined time range (1h, 1d, 7d, 30d)"),
+    time_range: Optional[str] = Query("30d", description="Predefined time range (1h, 1d, 7d, 30d)"),
     interval: Optional[str] = Query(None, description="Aggregation interval (1m, 1h, 1d, 7d)"),
     dimensions: Optional[str] = Query(None, description="Comma-separated list of dimensions to group by"),
     db: Session = Depends(get_db)
@@ -83,7 +83,7 @@ async def get_llm_token_usage(
     agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
     from_time: Optional[datetime] = Query(None, description="Start time (ISO format)"),
     to_time: Optional[datetime] = Query(None, description="End time (ISO format)"),
-    time_range: Optional[str] = Query("1d", description="Predefined time range (1h, 1d, 7d, 30d)"),
+    time_range: Optional[str] = Query("30d", description="Predefined time range (1h, 1d, 7d, 30d)"),
     interval: Optional[str] = Query(None, description="Aggregation interval (1m, 1h, 1d, 7d)"),
     dimensions: Optional[str] = Query(None, description="Comma-separated list of dimensions to group by"),
     db: Session = Depends(get_db)
@@ -140,7 +140,7 @@ async def get_llm_response_time(
     agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
     from_time: Optional[datetime] = Query(None, description="Start time (ISO format)"),
     to_time: Optional[datetime] = Query(None, description="End time (ISO format)"),
-    time_range: Optional[str] = Query("1d", description="Predefined time range (1h, 1d, 7d, 30d)"),
+    time_range: Optional[str] = Query("30d", description="Predefined time range (1h, 1d, 7d, 30d)"),
     interval: Optional[str] = Query(None, description="Aggregation interval (1m, 1h, 1d, 7d)"),
     dimensions: Optional[str] = Query(None, description="Comma-separated list of dimensions to group by"),
     db: Session = Depends(get_db)
@@ -197,7 +197,7 @@ async def get_tool_execution_count(
     agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
     from_time: Optional[datetime] = Query(None, description="Start time (ISO format)"),
     to_time: Optional[datetime] = Query(None, description="End time (ISO format)"),
-    time_range: Optional[str] = Query("1d", description="Predefined time range (1h, 1d, 7d, 30d)"),
+    time_range: Optional[str] = Query("30d", description="Predefined time range (1h, 1d, 7d, 30d)"),
     interval: Optional[str] = Query(None, description="Aggregation interval (1m, 1h, 1d, 7d)"),
     dimensions: Optional[str] = Query(None, description="Comma-separated list of dimensions to group by"),
     db: Session = Depends(get_db)
@@ -311,7 +311,7 @@ async def get_error_count(
     agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
     from_time: Optional[datetime] = Query(None, description="Start time (ISO format)"),
     to_time: Optional[datetime] = Query(None, description="End time (ISO format)"),
-    time_range: Optional[str] = Query("1d", description="Predefined time range (1h, 1d, 7d, 30d)"),
+    time_range: Optional[str] = Query("30d", description="Predefined time range (1h, 1d, 7d, 30d)"),
     interval: Optional[str] = Query(None, description="Aggregation interval (1m, 1h, 1d, 7d)"),
     dimensions: Optional[str] = Query(None, description="Comma-separated list of dimensions to group by"),
     db: Session = Depends(get_db)
@@ -368,7 +368,7 @@ async def get_session_count(
     agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
     from_time: Optional[datetime] = Query(None, description="Start time (ISO format)"),
     to_time: Optional[datetime] = Query(None, description="End time (ISO format)"),
-    time_range: Optional[str] = Query("1d", description="Predefined time range (1h, 1d, 7d, 30d)"),
+    time_range: Optional[str] = Query("30d", description="Predefined time range (1h, 1d, 7d, 30d)"),
     interval: Optional[str] = Query(None, description="Aggregation interval (1m, 1h, 1d, 7d)"),
     dimensions: Optional[str] = Query(None, description="Comma-separated list of dimensions to group by"),
     db: Session = Depends(get_db)
@@ -423,7 +423,7 @@ async def get_session_count(
 )
 async def get_agent_metrics(
     agent_id: str = Path(..., description="Agent ID to get metrics for"),
-    time_range: str = Query("1d", description="Time range (1h, 1d, 7d, 30d)"),
+    time_range: str = Query("30d", description="Time range (1h, 1d, 7d, 30d)"),
     db: Session = Depends(get_db)
 ):
     """
@@ -445,39 +445,68 @@ async def get_agent_metrics(
             detail=f"Invalid time_range value: {time_range}. Valid values are: 1h, 1d, 7d, 30d"
         )
     
+    # Initialize metrics object
+    metrics = {}
+    error_messages = []
+    
     try:
-        # Get metrics individually
-        llm_request_metric = get_metric(
-            MetricQuery(metric="llm_request_count", agent_id=agent_id, time_range=time_range),
-            db
-        )
+        # Get metrics individually, catching errors for individual metrics
+        try:
+            llm_request_metric = get_metric(
+                MetricQuery(metric="llm_request_count", agent_id=agent_id, time_range=time_range),
+                db
+            )
+            metrics["llm_requests"] = _extract_metric_value(llm_request_metric)
+        except Exception as e:
+            logger.error(f"Error getting llm_request_count metric: {str(e)}")
+            error_messages.append(f"llm_request_count: {str(e)}")
+            metrics["llm_requests"] = 0
         
-        token_usage_metric = get_metric(
-            MetricQuery(metric="llm_token_usage", agent_id=agent_id, time_range=time_range),
-            db
-        )
+        try:
+            token_usage_metric = get_metric(
+                MetricQuery(metric="llm_token_usage", agent_id=agent_id, time_range=time_range),
+                db
+            )
+            metrics["token_usage"] = _extract_metric_value(token_usage_metric)
+        except Exception as e:
+            logger.error(f"Error getting llm_token_usage metric: {str(e)}")
+            error_messages.append(f"llm_token_usage: {str(e)}")
+            metrics["token_usage"] = 0
         
-        tool_execution_metric = get_metric(
-            MetricQuery(metric="tool_execution_count", agent_id=agent_id, time_range=time_range),
-            db
-        )
+        try:
+            tool_execution_metric = get_metric(
+                MetricQuery(metric="tool_execution_count", agent_id=agent_id, time_range=time_range),
+                db
+            )
+            metrics["tool_executions"] = _extract_metric_value(tool_execution_metric)
+        except Exception as e:
+            logger.error(f"Error getting tool_execution_count metric: {str(e)}")
+            error_messages.append(f"tool_execution_count: {str(e)}")
+            metrics["tool_executions"] = 0
         
-        error_count_metric = get_metric(
-            MetricQuery(metric="error_count", agent_id=agent_id, time_range=time_range),
-            db
-        )
+        try:
+            error_count_metric = get_metric(
+                MetricQuery(metric="error_count", agent_id=agent_id, time_range=time_range),
+                db
+            )
+            metrics["errors"] = _extract_metric_value(error_count_metric)
+        except Exception as e:
+            logger.error(f"Error getting error_count metric: {str(e)}")
+            error_messages.append(f"error_count: {str(e)}")
+            metrics["errors"] = 0
         
         # Combine into a single response
-        return {
+        response = {
             "agent_id": agent_id,
             "time_range": time_range,
-            "metrics": {
-                "llm_requests": _extract_metric_value(llm_request_metric),
-                "token_usage": _extract_metric_value(token_usage_metric),
-                "tool_executions": _extract_metric_value(tool_execution_metric),
-                "errors": _extract_metric_value(error_count_metric)
-            }
+            "metrics": metrics
         }
+        
+        # Add errors if any
+        if error_messages:
+            response["error_details"] = error_messages
+            
+        return response
         
     except Exception as e:
         logger.error(f"Error getting agent metrics: {str(e)}", exc_info=True)

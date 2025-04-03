@@ -176,3 +176,5 @@ cython_debug/
 tasks/
 example*
 telemetry_schema.md
+*.db
+*.db-*

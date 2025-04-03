@@ -9,9 +9,14 @@ import logging
 import sqlite3
 from pathlib import Path
 from typing import Dict, Any, List, Tuple
+import os
+from datetime import datetime
+
+from src.models.base import Base, engine, drop_all, create_all
+from src.utils.logging import get_logger
 
 # Set up logger
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class AttributeMigration:
     """
@@ -652,6 +657,45 @@ class AttributeMigration:
         
         return result
 
+def rebuild_database():
+    """
+    Completely rebuild the database schema.
+    
+    WARNING: This will delete all existing data.
+    
+    Use this function to fix fundamental schema issues like foreign key mismatches.
+    """
+    logger.warning("Rebuilding entire database schema - all data will be lost")
+    
+    # Get the database path from the connection URL
+    db_path = None
+    if engine.url.drivername.startswith('sqlite'):
+        db_path = engine.url.database
+        if os.path.exists(db_path):
+            # Create a backup first
+            backup_path = f"{db_path}.backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+            try:
+                import shutil
+                shutil.copy2(db_path, backup_path)
+                logger.info(f"Created database backup at {backup_path}")
+            except Exception as e:
+                logger.error(f"Failed to create database backup: {e}")
+    
+    try:
+        # Drop all tables
+        logger.info("Dropping all tables...")
+        drop_all()
+        
+        # Create all tables with the updated schema
+        logger.info("Creating all tables with updated schema...")
+        create_all()
+        
+        logger.info("Database schema rebuilt successfully")
+        return True
+    except Exception as e:
+        logger.error(f"Error rebuilding database schema: {e}")
+        return False
+
 def main(db_path: str):
     """
     Run the migration.
@@ -688,10 +732,5 @@ def main(db_path: str):
     return stats
 
 if __name__ == "__main__":
-    import sys
-    
-    if len(sys.argv) != 2:
-        print("Usage: python schema_migration.py <db_path>")
-        sys.exit(1)
-    
-    main(sys.argv[1]) 
+    # Run the migration when the script is executed directly
+    rebuild_database() 

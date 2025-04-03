@@ -34,7 +34,7 @@ class Event(Base):
     level = Column(String, nullable=False, index=True)
     
     # Identifiers
-    agent_id = Column(String, ForeignKey("agents.id"), nullable=False, index=True)
+    agent_id = Column(String, ForeignKey("agents.agent_id"), nullable=False, index=True)
     trace_id = Column(String, ForeignKey("traces.trace_id"), nullable=True, index=True)
     span_id = Column(String, ForeignKey("spans.span_id"), nullable=True, index=True)
     parent_span_id = Column(String, nullable=True)

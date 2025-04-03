@@ -47,7 +47,7 @@ class SimpleProcessor:
     
     def process_event(self, event_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Process a single telemetry event.
+        Process a single event by validating, transforming, and storing it.
         
         Args:
             event_data: Dictionary containing the event data
@@ -55,48 +55,62 @@ class SimpleProcessor:
         Returns:
             Dict with processing results
         """
+        logger.debug(f"Processing event: {event_data.get('name', 'Unknown')}")
+        
         # Validate the event data
         validation_result = self._validate_event(event_data)
-        if not validation_result["valid"]:
+        if not validation_result.get("valid", False):
+            logger.warning(f"Event validation failed: {validation_result.get('error')}")
             return {
-                "success": False, 
-                "error": validation_result["error"],
-                "details": validation_result.get("details", {})
+                "success": False,
+                "error": validation_result.get("error", "Event validation failed")
             }
         
-        # Create database session - get the actual session from the generator
-        db_session = next(self.db_session_factory())
-        
+        # Get database session from generator
+        db_session = None
         try:
-            # Process the event
+            db_session = next(self.db_session_factory())
+            
+            # Check if all required tables exist (sanity check)
+            if not self._check_tables_exist(db_session):
+                logger.error("Database tables are not properly initialized")
+                return {
+                    "success": False,
+                    "error": "Database tables are not properly initialized"
+                }
+            
+            # Ensure agent exists for this event (create if not exists)
+            agent_id = event_data.get("agent_id")
+            self._ensure_agent_exists(db_session, agent_id)
+            
+            # Transform event data into database models
             event, related_models = self._transform_event(event_data, db_session)
             
-            # Add to session
-            db_session.add(event)
+            # Add all models to session
             for model in related_models:
                 db_session.add(model)
-                
-            # Commit
+            
+            # Commit the changes
             db_session.commit()
             
+            logger.info(f"Successfully processed event: {event_data.get('name')} (ID: {event.id})")
             return {
                 "success": True,
                 "event_id": event.id,
-                "event_name": event.name
+                "message": f"Event {event.id} processed successfully"
             }
-            
         except Exception as e:
-            db_session.rollback()
-            logger.error(f"Error processing event: {str(e)}", exc_info=True)
-            
+            logger.error(f"Error processing event: {str(e)}")
+            logger.exception(e)
+            if db_session:
+                db_session.rollback()
             return {
                 "success": False,
-                "error": str(e),
-                "details": {"exception_type": e.__class__.__name__}
+                "error": str(e)
             }
-            
         finally:
-            db_session.close()
+            if db_session:
+                db_session.close()
     
     def process_json_event(self, json_data: str) -> Dict[str, Any]:
         """
@@ -592,41 +606,68 @@ class SimpleProcessor:
         if not session_id:
             return
         
+        # IMPORTANT: Use the string agent_id, not the numeric id
+        agent_id = event.agent_id  # This is the string identifier like "chatbot-agent"
+        
+        # Debug log to help diagnose issues
+        logger.debug(f"Creating/updating session {session_id} for agent {agent_id}")
+        
         # Try to get or create the session
-        session = Session.get_or_create(db_session, session_id, event.agent_id, initialize_end_timestamp=False)
-        
-        # Update event's session ID
-        event.session_id = session_id
-        db_session.add(event)
-        
-        # Ensure timestamps are comparable (both naive or both aware)
-        event_timestamp = event.timestamp
-        session_start = session.start_timestamp
-        
-        # Make timestamps timezone-naive for comparison if needed
-        if hasattr(event_timestamp, 'tzinfo') and event_timestamp.tzinfo is not None:
-            # Event timestamp is timezone-aware, make it naive
-            event_timestamp = event_timestamp.replace(tzinfo=None)
-        
-        # Update start_timestamp if this event is earlier
-        if session_start is None or event_timestamp < session_start:
-            session.start_timestamp = event_timestamp
-            db_session.add(session)
+        try:
+            # First check if it exists
+            session = db_session.query(Session).filter(Session.session_id == session_id).first()
             
-        # Always update end_timestamp if this event is later than the current end_timestamp
-        # or if end_timestamp is not set
-        if session.end_timestamp is None or event_timestamp > session.end_timestamp:
-            session.end_timestamp = event_timestamp
-            db_session.add(session)
-        
-        # Add validation to ensure start_timestamp <= end_timestamp
-        if session.start_timestamp and session.end_timestamp and session.start_timestamp > session.end_timestamp:
-            logger.warning(f"Session timestamp inversion detected for session {session_id}. Fixing...")
-            # Fix by setting both to the same value (the latest timestamp available)
-            latest_timestamp = max(session.start_timestamp, session.end_timestamp)
-            session.start_timestamp = latest_timestamp
-            session.end_timestamp = latest_timestamp
-            db_session.add(session)
+            if not session:
+                # Create it with the string agent_id
+                current_time = datetime.utcnow()
+                session = Session(
+                    session_id=session_id,
+                    agent_id=agent_id,  # String ID, not numeric
+                    start_timestamp=current_time,
+                    end_timestamp=current_time  # Initialize with same time
+                )
+                db_session.add(session)
+                db_session.flush()
+                logger.debug(f"Created new session {session_id} for agent {agent_id}")
+            
+            # Update event's session ID
+            event.session_id = session_id
+            db_session.add(event)
+            
+            # Ensure timestamps are comparable (both naive or both aware)
+            event_timestamp = event.timestamp
+            session_start = session.start_timestamp
+            
+            # Make timestamps timezone-naive for comparison if needed
+            if hasattr(event_timestamp, 'tzinfo') and event_timestamp.tzinfo is not None:
+                # Event timestamp is timezone-aware, make it naive
+                event_timestamp = event_timestamp.replace(tzinfo=None)
+            
+            # Update start_timestamp if this event is earlier
+            if session_start is None or event_timestamp < session_start:
+                session.start_timestamp = event_timestamp
+                db_session.add(session)
+                
+            # Always update end_timestamp if this event is later than the current end_timestamp
+            # or if end_timestamp is not set
+            if session.end_timestamp is None or event_timestamp > session.end_timestamp:
+                session.end_timestamp = event_timestamp
+                db_session.add(session)
+            
+            # Add validation to ensure start_timestamp <= end_timestamp
+            if session.start_timestamp and session.end_timestamp and session.start_timestamp > session.end_timestamp:
+                logger.warning(f"Session timestamp inversion detected for session {session_id}. Fixing...")
+                # Fix by setting both to the same value (the latest timestamp available)
+                latest_timestamp = max(session.start_timestamp, session.end_timestamp)
+                session.start_timestamp = latest_timestamp
+                session.end_timestamp = latest_timestamp
+                db_session.add(session)
+                
+        except Exception as e:
+            # Log the error but continue processing
+            logger.error(f"Error processing session info: {str(e)}")
+            logger.debug(f"Session ID: {session_id}, Agent ID: {agent_id}")
+            logger.exception(e)
     
     def _fix_timestamps(self, event: Event, llm_interaction: LLMInteraction, db_session: Session) -> None:
         """
@@ -856,6 +897,66 @@ class SimpleProcessor:
                     )
                     db_session.add(trigger)
                     break  # Only associate with one alert 
+    
+    def _check_tables_exist(self, db_session) -> bool:
+        """
+        Check if all required tables exist in the database.
+        
+        Args:
+            db_session: SQLAlchemy session
+            
+        Returns:
+            bool: True if all tables exist, False otherwise
+        """
+        try:
+            # Try a simple query on the agents table as a sanity check
+            db_session.query(Agent).first()
+            return True
+        except Exception as e:
+            logger.error(f"Table check failed: {str(e)}")
+            return False
+            
+    def _ensure_agent_exists(self, db_session, agent_id: str) -> None:
+        """
+        Ensure an agent with the given ID exists, creating it if necessary.
+        
+        Args:
+            db_session: SQLAlchemy session
+            agent_id: Agent ID to check/create
+        """
+        if not agent_id:
+            logger.warning("Cannot create agent with empty agent_id")
+            return
+            
+        try:
+            # Check if agent exists - IMPORTANT: use agent_id, not id
+            agent = db_session.query(Agent).filter(Agent.agent_id == agent_id).first()
+            
+            # Create agent if it doesn't exist
+            if not agent:
+                logger.info(f"Creating new agent with ID: {agent_id}")
+                current_time = datetime.utcnow()
+                agent = Agent(
+                    agent_id=agent_id,  # This is the string identifier that will be referenced
+                    name=f"Agent-{agent_id[:8]}",  # Generate a simple name from ID
+                    first_seen=current_time,
+                    last_seen=current_time,
+                    is_active=True
+                )
+                db_session.add(agent)
+                db_session.flush()  # Flush to generate ID but don't commit yet
+                logger.debug(f"Successfully created agent with agent_id={agent_id}, db id={agent.id}")
+            else:
+                # Update last_seen time
+                agent.last_seen = datetime.utcnow()
+                db_session.add(agent)
+                logger.debug(f"Using existing agent with agent_id={agent_id}, db id={agent.id}")
+        except Exception as e:
+            logger.error(f"Error ensuring agent exists: {str(e)}")
+            logger.debug(f"Agent ID: {agent_id}")
+            logger.exception(e)
+            # Re-raise the exception to be handled by the caller
+            raise
 
 # Standalone function for testing and API layer
 def process_event(event_data: Dict[str, Any], db_session: Session) -> Event:

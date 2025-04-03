@@ -1,0 +1,1082 @@
+openapi: 3.0.3
+info:
+  title: Cylestio Local Server API
+  description: |
+    API for the Cylestio Local Server, providing telemetry, metrics, and agent management capabilities.
+    This API enables developers to integrate with and monitor AI agent operations.
+  version: 1.0.0
+  contact:
+    name: Cylestio Support
+    url: https://github.com/cylestio/cylestio-local-server
+
+servers:
+  - url: 'http://localhost:8000'
+    description: Local Development Server
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Telemetry
+    description: Endpoints for submitting and retrieving telemetry events
+  - name: Metrics
+    description: Endpoints for retrieving metrics and analytics
+  - name: Agents
+    description: Endpoints for managing and querying agent data
+
+paths:
+  /health:
+    get:
+      summary: Health Check
+      description: Returns the health status of the API
+      operationId: getHealth
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ok"
+                  version:
+                    type: string
+                    example: "1.0.0"
+  
+  /v1/telemetry:
+    post:
+      summary: Submit Telemetry Event
+      description: Submits a single telemetry event to the server
+      operationId: submitTelemetryEvent
+      tags:
+        - Telemetry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TelemetryEvent'
+      responses:
+        '201':
+          description: Event successfully created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  event_id:
+                    type: string
+                    format: uuid
+                    example: "123e4567-e89b-12d3-a456-426614174000"
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+    
+    get:
+      summary: Get Telemetry Events
+      description: Retrieves telemetry events matching the specified filters
+      operationId: getTelemetryEvents
+      tags:
+        - Telemetry
+      parameters:
+        - name: agent_id
+          in: query
+          description: Filter by agent ID
+          required: false
+          schema:
+            type: string
+        - name: from_time
+          in: query
+          description: Start time for event filtering (ISO 8601 format)
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: to_time
+          in: query
+          description: End time for event filtering (ISO 8601 format)
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: event_type
+          in: query
+          description: Filter by event type
+          required: false
+          schema:
+            type: string
+        - name: level
+          in: query
+          description: Filter by event level
+          required: false
+          schema:
+            type: string
+            enum: [debug, info, warning, error, critical]
+        - name: page
+          in: query
+          description: Page number
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          description: Number of items per page
+          required: false
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TelemetryEvent'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+  
+  /v1/telemetry/batch:
+    post:
+      summary: Submit Batch Telemetry Events
+      description: Submits multiple telemetry events in a batch
+      operationId: submitBatchTelemetryEvents
+      tags:
+        - Telemetry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                events:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/TelemetryEvent'
+              required:
+                - events
+      responses:
+        '201':
+          description: Events successfully created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  total:
+                    type: integer
+                    description: Total number of events in the batch
+                    example: 5
+                  processed:
+                    type: integer
+                    description: Number of events successfully processed
+                    example: 5
+                  failed_events:
+                    type: array
+                    description: List of events that failed processing
+                    items:
+                      type: object
+                      properties:
+                        event:
+                          $ref: '#/components/schemas/TelemetryEvent'
+                        error:
+                          type: string
+                          example: "Invalid event format"
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+  
+  /v1/telemetry/events/{event_id}:
+    get:
+      summary: Get Telemetry Event by ID
+      description: Retrieves a specific telemetry event by its ID
+      operationId: getTelemetryEventById
+      tags:
+        - Telemetry
+      parameters:
+        - name: event_id
+          in: path
+          description: ID of the telemetry event
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TelemetryEvent'
+        '404':
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  
+  /v1/telemetry/traces/{trace_id}/events:
+    get:
+      summary: Get Events by Trace ID
+      description: Retrieves all telemetry events belonging to a specific trace
+      operationId: getEventsByTraceId
+      tags:
+        - Telemetry
+      parameters:
+        - name: trace_id
+          in: path
+          description: Trace ID to filter by
+          required: true
+          schema:
+            type: string
+        - name: page
+          in: query
+          description: Page number
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          description: Number of items per page
+          required: false
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TelemetryEvent'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '404':
+          description: Trace not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  
+  /v1/dashboard:
+    get:
+      summary: Get Dashboard Metrics
+      description: Retrieves system-wide dashboard metrics
+      operationId: getDashboardMetrics
+      tags:
+        - Metrics
+      parameters:
+        - name: from_time
+          in: query
+          description: Start time for metrics (ISO 8601 format)
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: to_time
+          in: query
+          description: End time for metrics (ISO 8601 format)
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: time_range
+          in: query
+          description: Time range for metrics (e.g., '24h', '7d')
+          required: false
+          schema:
+            type: string
+        - name: interval
+          in: query
+          description: Interval for data points (e.g., '1h', '1d')
+          required: false
+          schema:
+            type: string
+            default: '1h'
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  metrics:
+                    type: object
+                    additionalProperties:
+                      $ref: '#/components/schemas/MetricData'
+                  from_time:
+                    type: string
+                    format: date-time
+                  to_time:
+                    type: string
+                    format: date-time
+                  interval:
+                    type: string
+                    example: '1h'
+  
+  /v1/metrics/llm/requests:
+    get:
+      summary: Get LLM Request Metrics
+      description: Retrieves metrics about LLM requests
+      operationId: getLlmRequestMetrics
+      tags:
+        - Metrics
+      parameters:
+        - name: agent_id
+          in: query
+          description: Filter by agent ID
+          required: false
+          schema:
+            type: string
+        - $ref: '#/components/parameters/FromTime'
+        - $ref: '#/components/parameters/ToTime'
+        - $ref: '#/components/parameters/TimeRange'
+        - $ref: '#/components/parameters/Interval'
+        - name: group_by
+          in: query
+          description: Group results by dimension
+          required: false
+          schema:
+            type: string
+            enum: [model, agent_id]
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricResponse'
+  
+  /v1/metrics/llm/tokens:
+    get:
+      summary: Get LLM Token Usage Metrics
+      description: Retrieves metrics about LLM token usage
+      operationId: getLlmTokenMetrics
+      tags:
+        - Metrics
+      parameters:
+        - name: agent_id
+          in: query
+          description: Filter by agent ID
+          required: false
+          schema:
+            type: string
+        - $ref: '#/components/parameters/FromTime'
+        - $ref: '#/components/parameters/ToTime'
+        - $ref: '#/components/parameters/TimeRange'
+        - $ref: '#/components/parameters/Interval'
+        - name: token_type
+          in: query
+          description: Type of tokens to measure
+          required: false
+          schema:
+            type: string
+            enum: [prompt, completion, total]
+            default: total
+        - name: group_by
+          in: query
+          description: Group results by dimension
+          required: false
+          schema:
+            type: string
+            enum: [model, agent_id, token_type]
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricResponse'
+  
+  /v1/metrics/tools/executions:
+    get:
+      summary: Get Tool Execution Metrics
+      description: Retrieves metrics about tool executions
+      operationId: getToolExecutionMetrics
+      tags:
+        - Metrics
+      parameters:
+        - name: agent_id
+          in: query
+          description: Filter by agent ID
+          required: false
+          schema:
+            type: string
+        - $ref: '#/components/parameters/FromTime'
+        - $ref: '#/components/parameters/ToTime'
+        - $ref: '#/components/parameters/TimeRange'
+        - $ref: '#/components/parameters/Interval'
+        - name: tool_name
+          in: query
+          description: Filter by tool name
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: Filter by execution status
+          required: false
+          schema:
+            type: string
+            enum: [success, error]
+        - name: group_by
+          in: query
+          description: Group results by dimension
+          required: false
+          schema:
+            type: string
+            enum: [tool_name, agent_id, status]
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricResponse'
+  
+  /v1/metrics/errors:
+    get:
+      summary: Get Error Metrics
+      description: Retrieves metrics about errors
+      operationId: getErrorMetrics
+      tags:
+        - Metrics
+      parameters:
+        - name: agent_id
+          in: query
+          description: Filter by agent ID
+          required: false
+          schema:
+            type: string
+        - $ref: '#/components/parameters/FromTime'
+        - $ref: '#/components/parameters/ToTime'
+        - $ref: '#/components/parameters/TimeRange'
+        - $ref: '#/components/parameters/Interval'
+        - name: error_type
+          in: query
+          description: Filter by error type
+          required: false
+          schema:
+            type: string
+        - name: group_by
+          in: query
+          description: Group results by dimension
+          required: false
+          schema:
+            type: string
+            enum: [error_type, agent_id]
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricResponse'
+  
+  /v1/metrics/sessions:
+    get:
+      summary: Get Session Metrics
+      description: Retrieves metrics about user sessions
+      operationId: getSessionMetrics
+      tags:
+        - Metrics
+      parameters:
+        - name: agent_id
+          in: query
+          description: Filter by agent ID
+          required: false
+          schema:
+            type: string
+        - $ref: '#/components/parameters/FromTime'
+        - $ref: '#/components/parameters/ToTime'
+        - $ref: '#/components/parameters/TimeRange'
+        - $ref: '#/components/parameters/Interval'
+        - name: group_by
+          in: query
+          description: Group results by dimension
+          required: false
+          schema:
+            type: string
+            enum: [agent_id]
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricResponse'
+  
+  /v1/agents:
+    get:
+      summary: List Agents
+      description: Retrieves a list of agents matching the specified filters
+      operationId: listAgents
+      tags:
+        - Agents
+      parameters:
+        - name: status
+          in: query
+          description: Filter by agent status
+          required: false
+          schema:
+            type: string
+            enum: [active, inactive, error]
+        - name: agent_type
+          in: query
+          description: Filter by agent type
+          required: false
+          schema:
+            type: string
+        - name: created_after
+          in: query
+          description: Filter by creation date
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: page
+          in: query
+          description: Page number
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          description: Number of items per page
+          required: false
+          schema:
+            type: integer
+            default: 20
+        - name: sort_by
+          in: query
+          description: Field to sort by
+          required: false
+          schema:
+            type: string
+            enum: [name, created_at, updated_at, status]
+            default: created_at
+        - name: sort_dir
+          in: query
+          description: Sort direction
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  agents:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Agent'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+  
+  /v1/agents/{agent_id}:
+    get:
+      summary: Get Agent Details
+      description: Retrieves detailed information about a specific agent
+      operationId: getAgentDetails
+      tags:
+        - Agents
+      parameters:
+        - name: agent_id
+          in: path
+          description: ID of the agent
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentDetails'
+        '404':
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  
+  /v1/agents/{agent_id}/dashboard:
+    get:
+      summary: Get Agent Dashboard
+      description: Retrieves dashboard metrics for a specific agent
+      operationId: getAgentDashboard
+      tags:
+        - Agents
+      parameters:
+        - name: agent_id
+          in: path
+          description: ID of the agent
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/FromTime'
+        - $ref: '#/components/parameters/ToTime'
+        - $ref: '#/components/parameters/TimeRange'
+        - $ref: '#/components/parameters/Interval'
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  agent:
+                    $ref: '#/components/schemas/Agent'
+                  metrics:
+                    type: object
+                    additionalProperties:
+                      $ref: '#/components/schemas/MetricData'
+                  from_time:
+                    type: string
+                    format: date-time
+                  to_time:
+                    type: string
+                    format: date-time
+                  interval:
+                    type: string
+                    example: '1h'
+        '404':
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  
+  /v1/agents/{agent_id}/llm/usage:
+    get:
+      summary: Get Agent LLM Usage
+      description: Retrieves LLM usage metrics for a specific agent
+      operationId: getAgentLlmUsage
+      tags:
+        - Agents
+      parameters:
+        - name: agent_id
+          in: path
+          description: ID of the agent
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/FromTime'
+        - $ref: '#/components/parameters/ToTime'
+        - $ref: '#/components/parameters/TimeRange'
+        - $ref: '#/components/parameters/Interval'
+        - name: group_by
+          in: query
+          description: Group results by dimension
+          required: false
+          schema:
+            type: string
+            enum: [model]
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricResponse'
+        '404':
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  
+  /v1/agents/{agent_id}/tools/usage:
+    get:
+      summary: Get Agent Tool Usage
+      description: Retrieves tool usage metrics for a specific agent
+      operationId: getAgentToolUsage
+      tags:
+        - Agents
+      parameters:
+        - name: agent_id
+          in: path
+          description: ID of the agent
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/FromTime'
+        - $ref: '#/components/parameters/ToTime'
+        - $ref: '#/components/parameters/TimeRange'
+        - $ref: '#/components/parameters/Interval'
+        - name: group_by
+          in: query
+          description: Group results by dimension
+          required: false
+          schema:
+            type: string
+            enum: [tool_name, status]
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricResponse'
+        '404':
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  
+  /v1/agents/{agent_id}/sessions:
+    get:
+      summary: Get Agent Sessions
+      description: Retrieves session data for a specific agent
+      operationId: getAgentSessions
+      tags:
+        - Agents
+      parameters:
+        - name: agent_id
+          in: path
+          description: ID of the agent
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/FromTime'
+        - $ref: '#/components/parameters/ToTime'
+        - $ref: '#/components/parameters/TimeRange'
+        - name: page
+          in: query
+          description: Page number
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          description: Number of items per page
+          required: false
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Session'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '404':
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  parameters:
+    FromTime:
+      name: from_time
+      in: query
+      description: Start time for data filtering (ISO 8601 format)
+      required: false
+      schema:
+        type: string
+        format: date-time
+    ToTime:
+      name: to_time
+      in: query
+      description: End time for data filtering (ISO 8601 format)
+      required: false
+      schema:
+        type: string
+        format: date-time
+    TimeRange:
+      name: time_range
+      in: query
+      description: Time range for data (e.g., '24h', '7d')
+      required: false
+      schema:
+        type: string
+    Interval:
+      name: interval
+      in: query
+      description: Interval for data points (e.g., '1h', '1d')
+      required: false
+      schema:
+        type: string
+        default: '1h'
+  
+  schemas:
+    TelemetryEvent:
+      type: object
+      properties:
+        schema_version:
+          type: string
+          example: "1.0"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2023-05-01T12:34:56.789Z"
+        trace_id:
+          type: string
+          example: "abcdef123456"
+        span_id:
+          type: string
+          example: "span123"
+        parent_span_id:
+          type: string
+          example: "parentspan456"
+        name:
+          type: string
+          example: "llm.request"
+        level:
+          type: string
+          enum: [debug, info, warning, error, critical]
+          example: "info"
+        agent_id:
+          type: string
+          example: "agent123"
+        attributes:
+          type: object
+          additionalProperties: true
+          example:
+            model: "gpt-4"
+            prompt_tokens: 150
+            completion_tokens: 50
+      required:
+        - schema_version
+        - timestamp
+        - name
+        - level
+    
+    MetricData:
+      type: object
+      properties:
+        metric:
+          type: string
+          example: "llm.request_count"
+        from_time:
+          type: string
+          format: date-time
+        to_time:
+          type: string
+          format: date-time
+        interval:
+          type: string
+          example: "1h"
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              timestamp:
+                type: string
+                format: date-time
+              value:
+                type: number
+              dimensions:
+                type: object
+                additionalProperties: true
+    
+    MetricResponse:
+      type: object
+      properties:
+        metric:
+          type: string
+          example: "llm.request_count"
+        from_time:
+          type: string
+          format: date-time
+        to_time:
+          type: string
+          format: date-time
+        interval:
+          type: string
+          example: "1h"
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              timestamp:
+                type: string
+                format: date-time
+              value:
+                type: number
+              dimensions:
+                type: object
+                additionalProperties: true
+    
+    Agent:
+      type: object
+      properties:
+        agent_id:
+          type: string
+          example: "agent123"
+        name:
+          type: string
+          example: "Customer Support Agent"
+        type:
+          type: string
+          example: "assistant"
+        status:
+          type: string
+          enum: [active, inactive, error]
+          example: "active"
+        description:
+          type: string
+          example: "AI agent for handling customer support inquiries"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    
+    AgentDetails:
+      allOf:
+        - $ref: '#/components/schemas/Agent'
+        - type: object
+          properties:
+            configuration:
+              type: object
+              additionalProperties: true
+            metrics:
+              type: object
+              additionalProperties:
+                $ref: '#/components/schemas/MetricData'
+    
+    Session:
+      type: object
+      properties:
+        session_id:
+          type: string
+          example: "session123"
+        agent_id:
+          type: string
+          example: "agent123"
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        duration_seconds:
+          type: number
+          example: 120
+        user_id:
+          type: string
+          example: "user456"
+        message_count:
+          type: integer
+          example: 10
+        status:
+          type: string
+          enum: [active, completed, error]
+          example: "completed"
+    
+    Pagination:
+      type: object
+      properties:
+        total:
+          type: integer
+          description: Total number of items
+          example: 100
+        page:
+          type: integer
+          description: Current page number
+          example: 1
+        page_size:
+          type: integer
+          description: Number of items per page
+          example: 20
+        pages:
+          type: integer
+          description: Total number of pages
+          example: 5
+    
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+          example: "Resource not found"
+        status_code:
+          type: integer
+          description: HTTP status code
+          example: 404
+        detail:
+          type: string
+          description: Detailed error information
+          example: "The requested resource could not be found"
+    
+    ValidationError:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+          example: "Validation error"
+        status_code:
+          type: integer
+          description: HTTP status code
+          example: 422
+        detail:
+          type: array
+          description: Validation error details
+          items:
+            type: object
+            properties:
+              loc:
+                type: array
+                items:
+                  type: string
+                example: ["body", "name"]
+              msg:
+                type: string
+                example: "field required"
+              type:
+                type: string
+                example: "value_error.missing" 

@@ -397,6 +397,7 @@ class TokenMetrics(AnalysisInterface):
         # Create query for token usage over time
         query = self.db_session.query(
             sql_time_bucket(Event.timestamp, params.resolution).label('time_bucket'),
+            LLMInteraction.model,
             func.sum(LLMInteraction.input_tokens).label('input_tokens'),
             func.sum(LLMInteraction.output_tokens).label('output_tokens'),
             func.sum(LLMInteraction.total_tokens).label('total_tokens'),
@@ -420,11 +421,15 @@ class TokenMetrics(AnalysisInterface):
         if params.trace_ids:
             query = query.filter(Event.trace_id.in_(params.trace_ids))
         
+        # Filter by model name if specified
+        if hasattr(params, 'filters') and params.filters and 'model' in params.filters:
+            query = query.filter(LLMInteraction.model == params.filters['model'])
+        
         # Filter for finish interactions only to avoid double counting
         query = query.filter(LLMInteraction.interaction_type == 'finish')
         
-        # Group by time bucket
-        query = query.group_by('time_bucket')
+        # Group by time bucket and model
+        query = query.group_by('time_bucket', LLMInteraction.model)
         
         # Order by time bucket
         query = query.order_by('time_bucket')
@@ -432,21 +437,19 @@ class TokenMetrics(AnalysisInterface):
         # Execute the query
         results = query.all()
         
-        # Format the results as time series data
-        fields = [
-            ('input_tokens', 'sum'),
-            ('output_tokens', 'sum'),
-            ('total_tokens', 'sum'),
-            ('interaction_count', 'sum')
-        ]
+        # Format the results
+        time_series_data = []
+        for result in results:
+            time_series_data.append({
+                'time_bucket': result.time_bucket,
+                'model': result.model,
+                'input_tokens': result.input_tokens or 0,
+                'output_tokens': result.output_tokens or 0,
+                'total_tokens': result.total_tokens or 0,
+                'interaction_count': result.interaction_count or 0
+            })
         
-        return format_time_series_data(
-            results,
-            'time_bucket',
-            fields,
-            time_range,
-            params.resolution
-        )
+        return time_series_data
     
     def get_token_usage_percentiles(
         self, 

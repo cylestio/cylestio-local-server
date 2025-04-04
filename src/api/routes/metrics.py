@@ -1,17 +1,19 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Path, status
-from sqlalchemy.orm import Session
-from typing import List, Optional, Dict, Any, Union
 from datetime import datetime, timedelta
+from typing import List, Dict, Optional, Any, Union
+
+from fastapi import APIRouter, Depends, Query, HTTPException, status, Path
+from sqlalchemy.orm import Session
 
 from src.database.session import get_db
-from src.utils.logging import get_logger
 from src.api.schemas.metrics import (
-    MetricQuery,
-    MetricResponse,
-    DashboardResponse,
-    TimeRange
+    MetricResponse, DashboardResponse
 )
-from src.analysis.interface import get_metric, get_dashboard_metrics
+from src.analysis.interface import (
+    MetricQuery, TimeRangeParams, TimeSeriesParams, TimeResolution, MetricParams,
+    get_metric, get_dashboard_metrics
+)
+from src.analysis.metrics.token_metrics import TokenMetrics
+from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -144,54 +146,134 @@ async def get_llm_request_count(
 
 @router.get(
     "/metrics/llm/token_usage",
-    response_model=MetricResponse,
-    summary="Get LLM token usage metrics"
+    summary="Get LLM token usage time series"
 )
 async def get_llm_token_usage(
-    agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
-    from_time: Optional[datetime] = Query(None, description="Start time (ISO format)"),
-    to_time: Optional[datetime] = Query(None, description="End time (ISO format)"),
     time_range: Optional[str] = Query("30d", description="Predefined time range (1h, 1d, 7d, 30d)"),
-    interval: Optional[str] = Query(None, description="Aggregation interval (1m, 1h, 1d, 7d)"),
-    dimensions: Optional[str] = Query(None, description="Comma-separated list of dimensions to group by"),
+    interval: Optional[str] = Query("1d", description="Aggregation interval (1m, 1h, 1d, 7d)"),
+    agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
+    model: Optional[str] = Query(None, description="Filter by model name"),
     db: Session = Depends(get_db)
 ):
     """
-    Get LLM token usage metrics with optional filtering and grouping.
+    Get LLM token usage time series data with filtering options.
     
     Returns:
-        MetricResponse: LLM token usage data points
+        Time series token usage data points with model and token type dimensions
     """
-    logger.info("Querying LLM token usage metrics")
-    
-    # Parse dimensions if provided
-    dimension_list = None
-    if dimensions:
-        dimension_list = [d.strip() for d in dimensions.split(',')]
-    
-    # Validate time_range if provided
-    if time_range and time_range not in ["1h", "1d", "7d", "30d"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid time_range value: {time_range}. Valid values are: 1h, 1d, 7d, 30d"
-        )
-    
-    # Create query object
-    query = MetricQuery(
-        metric="llm_token_usage",
-        agent_id=agent_id,
-        from_time=from_time,
-        to_time=to_time,
-        time_range=time_range,  # Pass the string directly
-        interval=interval,
-        dimensions=dimension_list
-    )
+    logger.info("Querying LLM token usage time series")
     
     try:
-        # Get metric data
-        metric_data = get_metric(query, db)
-        return metric_data
+        # Validate time_range
+        if time_range not in ["1h", "1d", "7d", "30d"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid time_range value: {time_range}. Valid values are: 1h, 1d, 7d, 30d"
+            )
         
+        # Calculate time range
+        to_time = datetime.utcnow()
+        if time_range == "1h":
+            from_time = to_time - timedelta(hours=1)
+        elif time_range == "1d":
+            from_time = to_time - timedelta(days=1)
+        elif time_range == "7d":
+            from_time = to_time - timedelta(days=7)
+        elif time_range == "30d":
+            from_time = to_time - timedelta(days=30)
+        
+        # Create token metrics analyzer
+        token_metrics = TokenMetrics(db)
+        
+        # Configure time range and resolution
+        time_range_obj = TimeRangeParams(start=from_time, end=to_time)
+        
+        # Map interval to resolution
+        resolution_map = {
+            "1m": TimeResolution.MINUTE,
+            "1h": TimeResolution.HOUR,
+            "1d": TimeResolution.DAY,
+            "7d": TimeResolution.WEEK
+        }
+        resolution = resolution_map.get(interval, TimeResolution.DAY)
+        
+        # Create params for time series
+        params = TimeSeriesParams(
+            time_range=time_range_obj,
+            resolution=resolution
+        )
+        
+        # Add agent filter if specified
+        if agent_id:
+            params.agent_ids = [agent_id]
+        
+        # Get time series data
+        time_series_data = token_metrics.get_token_usage_time_series(params)
+        
+        # If model is specified, filter the data after retrieval
+        filtered_data = time_series_data
+        if model:
+            filtered_data = [point for point in time_series_data if point.get('model') == model]
+            # If no data matches the model, use all data
+            if not filtered_data:
+                filtered_data = time_series_data
+                logger.warning(f"No data found for model {model}, using all data")
+        
+        # Format the data according to the requested structure
+        formatted_data = []
+        
+        for point in filtered_data:
+            # Make sure time_bucket is available in the point
+            if 'time_bucket' not in point:
+                logger.warning(f"Missing time_bucket in data point: {point}")
+                continue
+                
+            timestamp = point['time_bucket']
+            if timestamp is None:
+                logger.warning("Skipping data point with null timestamp")
+                continue
+                
+            # Handle timestamp formatting
+            if isinstance(timestamp, datetime):
+                timestamp_str = timestamp.isoformat()
+            elif isinstance(timestamp, str):
+                # It's already a string from sql_time_bucket
+                timestamp_str = timestamp
+            else:
+                timestamp_str = str(timestamp)
+            
+            # Add input token data point
+            input_point = {
+                "timestamp": timestamp_str,
+                "value": point.get("input_tokens", 0),
+                "dimensions": {
+                    "type": "input",
+                    "model": point.get("model", "all") if model is None else model
+                }
+            }
+            formatted_data.append(input_point)
+            
+            # Add output token data point
+            output_point = {
+                "timestamp": timestamp_str,
+                "value": point.get("output_tokens", 0),
+                "dimensions": {
+                    "type": "output",
+                    "model": point.get("model", "all") if model is None else model
+                }
+            }
+            formatted_data.append(output_point)
+        
+        # Create the response
+        response = {
+            "metric": "llm_token_usage",
+            "from_time": from_time.isoformat(),
+            "to_time": to_time.isoformat(),
+            "interval": interval,
+            "data": formatted_data
+        }
+        
+        return response
     except Exception as e:
         logger.error(f"Error getting LLM token usage metrics: {str(e)}", exc_info=True)
         raise HTTPException(
@@ -723,7 +805,6 @@ async def get_llm_requests_metrics(
 
 @router.get(
     "/metrics/tokens",
-    response_model=MetricResponse,
     summary="Get system-wide token usage metrics"
 )
 async def get_system_token_metrics(
@@ -741,50 +822,39 @@ async def get_system_token_metrics(
     including input/output token counts and estimated costs.
     
     Returns:
-        MetricResponse: Token usage data across the system
+        Token usage data across the system with model breakdown
     """
     logger.info("Querying system-wide token usage metrics")
     
-    # Parse group_by if provided to create dimensions list
-    dimension_list = None
-    if group_by:
-        # Map frontend-friendly names to actual dimension names
-        dimension_map = {
-            "model": "llm.model",
-            "agent": "agent_id"
-        }
-        # Get the actual dimension name or use as-is if not in map
-        actual_dimension = dimension_map.get(group_by, group_by)
-        dimension_list = [actual_dimension]
+    # Create token metrics analyzer
+    token_metrics = TokenMetrics(db)
     
-    # Validate time_range if provided
-    if time_range and time_range not in ["1h", "1d", "7d", "30d"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid time_range value: {time_range}. Valid values are: 1h, 1d, 7d, 30d"
-        )
+    # Get token usage summary for overall counts
+    summary = token_metrics.get_token_usage_summary()
     
-    # Create query object
-    query = MetricQuery(
-        metric="llm_token_usage",
-        from_time=from_time,
-        to_time=to_time,
-        time_range=time_range,
-        interval=interval,
-        dimensions=dimension_list
-    )
+    # Get token usage by model for the breakdown
+    model_params = MetricParams()
+    model_usage = token_metrics.get_token_usage_by_model(model_params)
     
-    try:
-        # Get metric data
-        metric_data = get_metric(query, db)
-        return metric_data
-        
-    except Exception as e:
-        logger.error(f"Error getting system token usage metrics: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving system token usage metrics: {str(e)}"
-        )
+    # Format the response in the requested structure
+    models = []
+    for item in model_usage.items:
+        models.append({
+            "name": item["model"],
+            "input_tokens": item["input_tokens"],
+            "output_tokens": item["output_tokens"],
+            "total_tokens": item["total_tokens"]
+        })
+    
+    # Create the response object
+    response = {
+        "input_tokens": summary["total_input_tokens"],
+        "output_tokens": summary["total_output_tokens"],
+        "total_tokens": summary["total_tokens"],
+        "models": models
+    }
+    
+    return response
 
 # Tool usage metrics endpoints
 

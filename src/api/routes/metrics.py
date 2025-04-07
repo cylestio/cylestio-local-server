@@ -1200,7 +1200,7 @@ async def get_tool_interactions(
     to_time: Optional[datetime] = Query(None, description="End time (ISO format)"),
     time_range: Optional[str] = Query("30d", description="Predefined time range (1h, 1d, 7d, 30d)"),
     tool_name: Optional[str] = Query(None, description="Filter by specific tool name"),
-    status: Optional[str] = Query(None, description="Filter by execution status (success, error, pending)"),
+    tool_status: Optional[str] = Query(None, description="Filter by execution status (success, error, pending)"),
     framework_name: Optional[str] = Query(None, description="Filter by framework name"),
     interaction_type: Optional[str] = Query(None, description="Filter by interaction type (execution, result)"),
     sort_by: Optional[str] = Query("request_timestamp", description="Field to sort by"),
@@ -1210,13 +1210,12 @@ async def get_tool_interactions(
     db: Session = Depends(get_db)
 ):
     """
-    Get comprehensive tool interaction data with detailed information.
+    Get detailed information about tool interactions with rich filtering options.
     
-    This endpoint provides detailed information about tool interactions, including:
-    - Tool name, interaction type, status
-    - Request/response timestamps and duration
-    - Parameters, results, and error details
-    - Associated framework and metadata
+    This endpoint provides comprehensive data about tool interactions, including:
+    - Execution details (parameters, status, duration)
+    - Result data (responses, errors)
+    - Metadata (timestamps, framework, version)
     - Raw attributes and associated event information
     
     Results can be filtered by various criteria and are paginated.
@@ -1229,7 +1228,7 @@ async def get_tool_interactions(
     # Validate time_range if provided
     if time_range and time_range not in ["1h", "1d", "7d", "30d"]:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=400,
             detail=f"Invalid time_range value: {time_range}. Valid values are: 1h, 1d, 7d, 30d"
         )
     
@@ -1246,7 +1245,7 @@ async def get_tool_interactions(
             to_time=time_params[1],
             agent_id=agent_id,
             tool_name=tool_name,
-            status=status,
+            status=tool_status,
             framework_name=framework_name,
             interaction_type=interaction_type,
             sort_by=sort_by,

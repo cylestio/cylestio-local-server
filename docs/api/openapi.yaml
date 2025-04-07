@@ -439,17 +439,16 @@ paths:
         - $ref: '#/components/parameters/TimeRange'
         - name: tool_name
           in: query
-          description: Filter by tool name
+          description: Filter by specific tool name
           required: false
           schema:
             type: string
-        - name: status
+        - name: tool_status
           in: query
-          description: Filter by execution status
+          description: Filter by execution status (success, error, pending)
           required: false
           schema:
             type: string
-            enum: [success, error, pending]
         - name: framework_name
           in: query
           description: Filter by framework name

@@ -10,6 +10,47 @@ from sqlalchemy import func, text
 import json
 
 
+def parse_time_range(
+    from_time: Optional[datetime] = None,
+    to_time: Optional[datetime] = None,
+    time_range: Optional[str] = None
+) -> Tuple[Optional[datetime], Optional[datetime]]:
+    """
+    Parse time range parameters and return start and end times.
+    
+    Args:
+        from_time: Explicit start time
+        to_time: Explicit end time
+        time_range: Predefined time range string ("1h", "1d", "7d", "30d")
+        
+    Returns:
+        Tuple of (from_time, to_time) as datetime objects
+    """
+    # If explicit times are provided, use them
+    if from_time and to_time:
+        return from_time, to_time
+    
+    # Calculate time range if using predefined range
+    if time_range:
+        now = datetime.utcnow()
+        
+        if time_range == "1h":
+            return now - timedelta(hours=1), now
+        elif time_range == "1d":
+            return now - timedelta(days=1), now
+        elif time_range == "7d":
+            return now - timedelta(days=7), now
+        elif time_range == "30d":
+            return now - timedelta(days=30), now
+        else:
+            # Default to 30 days if invalid range is provided
+            return now - timedelta(days=30), now
+    
+    # Default: last 30 days
+    now = datetime.utcnow()
+    return now - timedelta(days=30), now
+
+
 def format_time_series_data(
     data: List[Any], 
     timestamp_field: str = 'timestamp',

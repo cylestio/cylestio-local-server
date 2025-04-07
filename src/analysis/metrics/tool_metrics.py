@@ -6,6 +6,7 @@ tool success rates, and tool usage patterns.
 """
 from typing import Dict, List, Any, Optional, Tuple, Union
 from datetime import datetime
+import json
 
 from sqlalchemy import func, and_, or_, desc, text, case
 from sqlalchemy.orm import Session, aliased
@@ -33,6 +34,17 @@ class ToolMetrics(AnalysisInterface):
     This class provides methods for analyzing tool usage patterns,
     success rates, and performance.
     """
+    
+    def __init__(self, db_session, logger=None):
+        """
+        Initialize ToolMetrics with database session and logger.
+        
+        Args:
+            db_session: Database session
+            logger: Optional logger instance
+        """
+        super().__init__(db_session)
+        self.logger = logger
     
     def get_tool_usage_summary(
         self, 
@@ -543,4 +555,157 @@ class ToolMetrics(AnalysisInterface):
         return {
             'error_count': sum(result.count for result in results),
             'by_tool': sorted_errors
+        }
+    
+    def get_tool_interactions_detailed(
+        self,
+        from_time: Optional[datetime] = None,
+        to_time: Optional[datetime] = None,
+        agent_id: Optional[str] = None,
+        tool_name: Optional[str] = None,
+        status: Optional[str] = None,
+        framework_name: Optional[str] = None,
+        interaction_type: Optional[str] = None,
+        sort_by: Optional[str] = "request_timestamp",
+        sort_dir: Optional[str] = "desc",
+        page: int = 1,
+        page_size: int = 20
+    ) -> Dict[str, Any]:
+        """
+        Get detailed tool interaction data with pagination support.
+        
+        Args:
+            from_time: Start time for the query range
+            to_time: End time for the query range
+            agent_id: Optional filter by agent ID
+            tool_name: Optional filter by tool name
+            status: Optional filter by status (success, error, pending)
+            framework_name: Optional filter by framework name
+            interaction_type: Optional filter by interaction type (execution, result)
+            sort_by: Field to sort by (default: "request_timestamp")
+            sort_dir: Sort direction ("asc" or "desc", default: "desc")
+            page: Page number (default: 1)
+            page_size: Page size (default: 20)
+            
+        Returns:
+            Dictionary with pagination details and list of tool interactions
+        """
+        # Create base query for tool interactions with all relevant fields
+        query = self.db_session.query(
+            ToolInteraction,
+            Event.span_id,
+            Event.trace_id,
+            Event.agent_id
+        ).join(
+            Event, ToolInteraction.event_id == Event.id
+        )
+        
+        # Apply time range filters
+        if from_time:
+            query = query.filter(Event.timestamp >= from_time)
+        if to_time:
+            query = query.filter(Event.timestamp <= to_time)
+        
+        # Apply agent filter if provided
+        if agent_id:
+            query = query.filter(Event.agent_id == agent_id)
+            
+        # Apply additional specific filters
+        if tool_name:
+            query = query.filter(ToolInteraction.tool_name == tool_name)
+        
+        if status:
+            query = query.filter(ToolInteraction.status == status)
+            
+        if framework_name:
+            query = query.filter(ToolInteraction.framework_name == framework_name)
+            
+        if interaction_type:
+            query = query.filter(ToolInteraction.interaction_type == interaction_type)
+        
+        # Get total count before pagination and sorting
+        count_query = query.statement.with_only_columns(func.count()).order_by(None)
+        total_count = self.db_session.execute(count_query).scalar() or 0
+        
+        # Apply sorting with direct parameters
+        # Define valid sort fields
+        field_mapping = {
+            'id': ToolInteraction.id,
+            'tool_name': ToolInteraction.tool_name,
+            'status': ToolInteraction.status,
+            'request_timestamp': ToolInteraction.request_timestamp,
+            'response_timestamp': ToolInteraction.response_timestamp,
+            'duration_ms': ToolInteraction.duration_ms
+        }
+        
+        # Get the column to sort by
+        if sort_by in field_mapping:
+            column = field_mapping[sort_by]
+            
+            # Apply sort direction
+            if sort_dir == "desc":
+                query = query.order_by(desc(column))
+            else:
+                query = query.order_by(column)
+        else:
+            # Default sort by timestamp desc if invalid field
+            query = query.order_by(desc(ToolInteraction.request_timestamp))
+        
+        # Apply pagination directly
+        offset = (page - 1) * page_size
+        query = query.offset(offset).limit(page_size)
+        
+        # Execute the query
+        results = query.all()
+        
+        # Format the results
+        interactions = []
+        for tool_interaction, span_id, trace_id, agent_id in results:
+            # Parse JSON fields
+            try:
+                parameters = json.loads(tool_interaction.parameters) if tool_interaction.parameters else None
+            except (json.JSONDecodeError, TypeError):
+                parameters = tool_interaction.parameters
+                
+            try:
+                result = json.loads(tool_interaction.result) if tool_interaction.result else None
+            except (json.JSONDecodeError, TypeError):
+                result = tool_interaction.result
+            
+            # Create interaction data
+            interaction_data = {
+                'id': tool_interaction.id,
+                'event_id': tool_interaction.event_id,
+                'tool_name': tool_interaction.tool_name or "unknown",
+                'interaction_type': tool_interaction.interaction_type or "unknown",
+                'status': tool_interaction.status or "unknown",
+                'status_code': tool_interaction.status_code,
+                'parameters': parameters,
+                'result': result,
+                'error': tool_interaction.error,
+                'request_timestamp': tool_interaction.request_timestamp,
+                'response_timestamp': tool_interaction.response_timestamp,
+                'duration_ms': tool_interaction.duration_ms,
+                'framework_name': tool_interaction.framework_name,
+                'tool_version': tool_interaction.tool_version,
+                'authorization_level': tool_interaction.authorization_level,
+                'execution_time_ms': tool_interaction.execution_time_ms,
+                'cache_hit': tool_interaction.cache_hit,
+                'api_version': tool_interaction.api_version,
+                'raw_attributes': tool_interaction.raw_attributes,
+                'span_id': span_id,
+                'trace_id': trace_id,
+                'agent_id': agent_id
+            }
+            
+            interactions.append(interaction_data)
+        
+        # Return the detailed response
+        return {
+            'total': total_count,
+            'page': page,
+            'page_size': page_size,
+            'from_time': from_time,
+            'to_time': to_time,
+            'interactions': interactions
         } 

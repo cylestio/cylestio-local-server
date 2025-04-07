@@ -40,6 +40,7 @@ Endpoints for retrieving aggregated metrics and analytics:
 - `GET /v1/metrics/tool/success_rate` - Get tool success rate metrics
 - `GET /v1/metrics/error/count` - Get error count metrics
 - `GET /v1/metrics/session/count` - Get session count metrics
+- `GET /v1/metrics/tool_interactions` - Get tool interactions metrics
 - And more...
 
 See [Metrics Endpoints Guide](./metrics-endpoints-guide.md) for detailed documentation.

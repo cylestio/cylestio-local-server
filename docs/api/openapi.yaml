@@ -416,11 +416,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/MetricResponse'
   
-  /v1/metrics/tools/executions:
+  /v1/metrics/tool_interactions:
     get:
-      summary: Get Tool Execution Metrics
-      description: Retrieves metrics about tool executions
-      operationId: getToolExecutionMetrics
+      summary: Get Comprehensive Tool Interaction Data
+      description: |
+        Retrieves detailed tool interaction data with full context.
+        
+        This endpoint provides complete information about tool interactions, including parameters,
+        results, timestamps, status, and metadata. Results can be filtered, sorted, and paginated.
+      operationId: getToolInteractions
       tags:
         - Metrics
       parameters:
@@ -433,7 +437,6 @@ paths:
         - $ref: '#/components/parameters/FromTime'
         - $ref: '#/components/parameters/ToTime'
         - $ref: '#/components/parameters/TimeRange'
-        - $ref: '#/components/parameters/Interval'
         - name: tool_name
           in: query
           description: Filter by tool name
@@ -446,21 +449,60 @@ paths:
           required: false
           schema:
             type: string
-            enum: [success, error]
-        - name: group_by
+            enum: [success, error, pending]
+        - name: framework_name
           in: query
-          description: Group results by dimension
+          description: Filter by framework name
           required: false
           schema:
             type: string
-            enum: [tool_name, agent_id, status]
+        - name: interaction_type
+          in: query
+          description: Filter by interaction type
+          required: false
+          schema:
+            type: string
+            enum: [execution, result]
+        - name: sort_by
+          in: query
+          description: Field to sort by
+          required: false
+          schema:
+            type: string
+            default: request_timestamp
+            enum: [id, tool_name, status, request_timestamp, response_timestamp, duration_ms]
+        - name: sort_dir
+          in: query
+          description: Sort direction
+          required: false
+          schema:
+            type: string
+            default: desc
+            enum: [asc, desc]
+        - name: page
+          in: query
+          description: Page number
+          required: false
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: page_size
+          in: query
+          description: Page size
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
       responses:
         '200':
           description: Successful operation
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MetricResponse'
+                $ref: '#/components/schemas/ToolInteractionListResponse'
   
   /v1/metrics/errors:
     get:
@@ -1079,4 +1121,154 @@ components:
                 example: "field required"
               type:
                 type: string
-                example: "value_error.missing" 
+                example: "value_error.missing"
+
+    ToolInteractionListResponse:
+      type: object
+      properties:
+        total:
+          type: integer
+          description: Total number of interactions matching the query
+          example: 145
+        page:
+          type: integer
+          description: Current page number
+          example: 1
+        page_size:
+          type: integer
+          description: Page size
+          example: 20
+        from_time:
+          type: string
+          format: date-time
+          description: Query start time
+          example: "2023-05-01T00:00:00.000Z"
+        to_time:
+          type: string
+          format: date-time
+          description: Query end time
+          example: "2023-05-31T23:59:59.999Z"
+        interactions:
+          type: array
+          description: List of tool interactions
+          items:
+            $ref: '#/components/schemas/ToolInteractionDetail'
+
+    ToolInteractionDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Tool interaction ID
+          example: 123
+        event_id:
+          type: integer
+          description: Associated event ID
+          example: 456
+        tool_name:
+          type: string
+          description: Name of the tool
+          example: "web_search"
+        interaction_type:
+          type: string
+          description: Type of interaction
+          enum: [execution, result]
+          example: "execution"
+        status:
+          type: string
+          description: Status of the tool interaction
+          enum: [success, error, pending]
+          example: "success"
+        status_code:
+          type: integer
+          description: Status code if applicable
+          example: 200
+          nullable: true
+        parameters:
+          type: object
+          description: Tool parameters (parsed from JSON)
+          nullable: true
+          additionalProperties: true
+          example:
+            query: "weather in San Francisco"
+            limit: 5
+        result:
+          type: object
+          description: Tool result (parsed from JSON)
+          nullable: true
+          additionalProperties: true
+          example:
+            temperature: "72°F"
+            conditions: "Sunny"
+        error:
+          type: string
+          description: Error message if any
+          nullable: true
+          example: "API rate limit exceeded"
+        request_timestamp:
+          type: string
+          format: date-time
+          description: When the tool request was made
+          nullable: true
+          example: "2023-05-15T14:30:00.000Z"
+        response_timestamp:
+          type: string
+          format: date-time
+          description: When the tool response was received
+          nullable: true
+          example: "2023-05-15T14:30:01.250Z"
+        duration_ms:
+          type: number
+          description: Duration of the tool execution in milliseconds
+          nullable: true
+          example: 1250
+        framework_name:
+          type: string
+          description: Framework that was used
+          nullable: true
+          example: "langchain"
+        tool_version:
+          type: string
+          description: Tool version
+          nullable: true
+          example: "1.2.3"
+        authorization_level:
+          type: string
+          description: Authorization level used
+          nullable: true
+          example: "user"
+        execution_time_ms:
+          type: number
+          description: Execution time in milliseconds
+          nullable: true
+          example: 1150
+        cache_hit:
+          type: boolean
+          description: Whether the result was from cache
+          nullable: true
+          example: false
+        api_version:
+          type: string
+          description: API version used
+          nullable: true
+          example: "v2"
+        raw_attributes:
+          type: object
+          description: Raw attributes from the event
+          nullable: true
+          additionalProperties: true
+        span_id:
+          type: string
+          description: Span ID from the associated event
+          nullable: true
+          example: "span123"
+        trace_id:
+          type: string
+          description: Trace ID from the associated event
+          nullable: true
+          example: "trace456"
+        agent_id:
+          type: string
+          description: Agent ID from the associated event
+          nullable: true
+          example: "agent789" 

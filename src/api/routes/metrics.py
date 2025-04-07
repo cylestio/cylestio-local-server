@@ -6,14 +6,16 @@ from sqlalchemy.orm import Session
 
 from src.database.session import get_db
 from src.api.schemas.metrics import (
-    MetricResponse, DashboardResponse
+    MetricResponse, DashboardResponse, ToolInteractionListResponse
 )
 from src.analysis.interface import (
     MetricQuery, TimeRangeParams, TimeSeriesParams, TimeResolution, MetricParams,
     get_metric, get_dashboard_metrics
 )
 from src.analysis.metrics.token_metrics import TokenMetrics
+from src.analysis.metrics.tool_metrics import ToolMetrics
 from src.utils.logging import get_logger
+from src.analysis.utils import parse_time_range
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -339,63 +341,6 @@ async def get_llm_response_time(
         )
 
 @router.get(
-    "/metrics/tool/execution_count",
-    response_model=MetricResponse,
-    summary="Get tool execution count metrics"
-)
-async def get_tool_execution_count(
-    agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
-    from_time: Optional[datetime] = Query(None, description="Start time (ISO format)"),
-    to_time: Optional[datetime] = Query(None, description="End time (ISO format)"),
-    time_range: Optional[str] = Query("30d", description="Predefined time range (1h, 1d, 7d, 30d)"),
-    interval: Optional[str] = Query(None, description="Aggregation interval (1m, 1h, 1d, 7d)"),
-    dimensions: Optional[str] = Query(None, description="Comma-separated list of dimensions to group by"),
-    db: Session = Depends(get_db)
-):
-    """
-    Get tool execution count metrics with optional filtering and grouping.
-    
-    Returns:
-        MetricResponse: Tool execution count data points
-    """
-    logger.info("Querying tool execution count metrics")
-    
-    # Parse dimensions if provided
-    dimension_list = None
-    if dimensions:
-        dimension_list = [d.strip() for d in dimensions.split(',')]
-    
-    # Validate time_range if provided
-    if time_range and time_range not in ["1h", "1d", "7d", "30d"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid time_range value: {time_range}. Valid values are: 1h, 1d, 7d, 30d"
-        )
-    
-    # Create query object
-    query = MetricQuery(
-        metric="tool_execution_count",
-        agent_id=agent_id,
-        from_time=from_time,
-        to_time=to_time,
-        time_range=time_range,  # Pass the string directly
-        interval=interval,
-        dimensions=dimension_list
-    )
-    
-    try:
-        # Get metric data
-        metric_data = get_metric(query, db)
-        return metric_data
-        
-    except Exception as e:
-        logger.error(f"Error getting tool execution count metrics: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving tool execution count metrics: {str(e)}"
-        )
-
-@router.get(
     "/metrics/tool/success_rate",
     response_model=MetricResponse,
     summary="Get tool success rate metrics"
@@ -624,17 +569,6 @@ async def get_agent_metrics(
             metrics["token_usage"] = 0
         
         try:
-            tool_execution_metric = get_metric(
-                MetricQuery(metric="tool_execution_count", agent_id=agent_id, time_range=time_range),
-                db
-            )
-            metrics["tool_executions"] = _extract_metric_value(tool_execution_metric)
-        except Exception as e:
-            logger.error(f"Error getting tool_execution_count metric: {str(e)}")
-            error_messages.append(f"tool_execution_count: {str(e)}")
-            metrics["tool_executions"] = 0
-        
-        try:
             error_count_metric = get_metric(
                 MetricQuery(metric="error_count", agent_id=agent_id, time_range=time_range),
                 db
@@ -855,158 +789,6 @@ async def get_system_token_metrics(
     }
     
     return response
-
-# Tool usage metrics endpoints
-
-@router.get(
-    "/metrics/tools",
-    response_model=MetricResponse,
-    summary="Get aggregated tool usage analytics"
-)
-async def get_tool_usage_metrics(
-    from_time: Optional[datetime] = Query(None, description="Start time (ISO format)"),
-    to_time: Optional[datetime] = Query(None, description="End time (ISO format)"),
-    time_range: Optional[str] = Query("30d", description="Predefined time range (1h, 1d, 7d, 30d)"),
-    interval: Optional[str] = Query(None, description="Aggregation interval (1m, 1h, 1d, 7d)"),
-    group_by: Optional[str] = Query("tool.name", description="Dimension to group by (default: tool.name)"),
-    db: Session = Depends(get_db)
-):
-    """
-    Get aggregated tool usage analytics across all agents.
-    
-    This endpoint provides data on the most-used tools across all agents,
-    including success rates and execution counts.
-    
-    Returns:
-        MetricResponse: Aggregated tool usage data
-    """
-    logger.info("Querying aggregated tool usage metrics")
-    
-    # Parse group_by to create dimensions list
-    dimension_list = None
-    if group_by:
-        # Map frontend-friendly names to actual dimension names
-        dimension_map = {
-            "tool": "tool.name",
-            "agent": "agent_id",
-            "status": "status"
-        }
-        # Get the actual dimension name or use as-is if not in map
-        actual_dimension = dimension_map.get(group_by, group_by)
-        dimension_list = [actual_dimension]
-    
-    # Validate time_range if provided
-    if time_range and time_range not in ["1h", "1d", "7d", "30d"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid time_range value: {time_range}. Valid values are: 1h, 1d, 7d, 30d"
-        )
-    
-    # Create query object
-    query = MetricQuery(
-        metric="tool_execution_count",
-        from_time=from_time,
-        to_time=to_time,
-        time_range=time_range,
-        interval=interval,
-        dimensions=dimension_list
-    )
-    
-    try:
-        # Get metric data
-        metric_data = get_metric(query, db)
-        
-        # Adjust the metric name for clarity in response
-        metric_data.metric = "tool_usage_analytics"
-        
-        return metric_data
-        
-    except Exception as e:
-        logger.error(f"Error getting tool usage metrics: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving tool usage metrics: {str(e)}"
-        )
-
-@router.get(
-    "/metrics/tools/executions",
-    response_model=MetricResponse,
-    summary="Get tool execution metrics over time"
-)
-async def get_tool_execution_metrics(
-    from_time: Optional[datetime] = Query(None, description="Start time (ISO format)"),
-    to_time: Optional[datetime] = Query(None, description="End time (ISO format)"),
-    time_range: Optional[str] = Query("30d", description="Predefined time range (1h, 1d, 7d, 30d)"),
-    interval: Optional[str] = Query("1d", description="Aggregation interval (1m, 1h, 1d, 7d)"),
-    tool_name: Optional[str] = Query(None, description="Filter by specific tool name"),
-    status: Optional[str] = Query(None, description="Filter by execution status (success, error)"),
-    agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
-    db: Session = Depends(get_db)
-):
-    """
-    Get tool execution metrics over time with filtering options.
-    
-    This endpoint provides time series data for tool execution volume,
-    with optional filtering by tool name, status, or agent.
-    
-    Returns:
-        MetricResponse: Tool execution time series data
-    """
-    logger.info("Querying tool execution metrics over time")
-    
-    # Build filters based on parameters
-    filters = {}
-    if tool_name:
-        filters["tool.name"] = tool_name
-    if status:
-        filters["status"] = status
-    
-    # Determine dimensions based on filters
-    dimension_list = ["tool.name"]
-    
-    # Validate time_range if provided
-    if time_range and time_range not in ["1h", "1d", "7d", "30d"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid time_range value: {time_range}. Valid values are: 1h, 1d, 7d, 30d"
-        )
-    
-    # Create query object
-    query = MetricQuery(
-        metric="tool_execution_count",
-        agent_id=agent_id,
-        from_time=from_time,
-        to_time=to_time,
-        time_range=time_range,
-        interval=interval,
-        dimensions=dimension_list
-    )
-    
-    try:
-        # Get metric data
-        metric_data = get_metric(query, db)
-        
-        # Filter data points if we have filters
-        if filters:
-            filtered_data = []
-            for point in metric_data.data:
-                include = True
-                for key, value in filters.items():
-                    if key in point.dimensions and point.dimensions[key] != value:
-                        include = False
-                        break
-                if include:
-                    filtered_data.append(point)
-            metric_data.data = filtered_data
-        
-        return metric_data
-        
-    except Exception as e:
-        logger.error(f"Error getting tool execution metrics: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving tool execution metrics: {str(e)}"
-        )
 
 # Performance metrics endpoints
 
@@ -1404,4 +1186,80 @@ async def get_usage_patterns(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving usage patterns: {str(e)}"
+        )
+
+# Tool interaction comprehensive endpoint
+@router.get(
+    "/metrics/tool_interactions",
+    response_model=ToolInteractionListResponse,
+    summary="Get comprehensive tool interaction data"
+)
+async def get_tool_interactions(
+    agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
+    from_time: Optional[datetime] = Query(None, description="Start time (ISO format)"),
+    to_time: Optional[datetime] = Query(None, description="End time (ISO format)"),
+    time_range: Optional[str] = Query("30d", description="Predefined time range (1h, 1d, 7d, 30d)"),
+    tool_name: Optional[str] = Query(None, description="Filter by specific tool name"),
+    status: Optional[str] = Query(None, description="Filter by execution status (success, error, pending)"),
+    framework_name: Optional[str] = Query(None, description="Filter by framework name"),
+    interaction_type: Optional[str] = Query(None, description="Filter by interaction type (execution, result)"),
+    sort_by: Optional[str] = Query("request_timestamp", description="Field to sort by"),
+    sort_dir: Optional[str] = Query("desc", description="Sort direction (asc, desc)"),
+    page: int = Query(1, description="Page number", ge=1),
+    page_size: int = Query(20, description="Page size", ge=1, le=100),
+    db: Session = Depends(get_db)
+):
+    """
+    Get comprehensive tool interaction data with detailed information.
+    
+    This endpoint provides detailed information about tool interactions, including:
+    - Tool name, interaction type, status
+    - Request/response timestamps and duration
+    - Parameters, results, and error details
+    - Associated framework and metadata
+    - Raw attributes and associated event information
+    
+    Results can be filtered by various criteria and are paginated.
+    
+    Returns:
+        ToolInteractionListResponse: Paginated tool interaction details
+    """
+    logger.info("Querying comprehensive tool interaction data")
+    
+    # Validate time_range if provided
+    if time_range and time_range not in ["1h", "1d", "7d", "30d"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid time_range value: {time_range}. Valid values are: 1h, 1d, 7d, 30d"
+        )
+    
+    try:
+        # Convert time parameters to objects that the metrics interface expects
+        time_params = parse_time_range(from_time, to_time, time_range)
+        
+        # Create the tool metrics interface
+        tool_metrics = ToolMetrics(db)
+        
+        # Get detailed tool interactions
+        interactions_data = tool_metrics.get_tool_interactions_detailed(
+            from_time=time_params[0],
+            to_time=time_params[1],
+            agent_id=agent_id,
+            tool_name=tool_name,
+            status=status,
+            framework_name=framework_name,
+            interaction_type=interaction_type,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
+            page=page,
+            page_size=page_size
+        )
+        
+        return ToolInteractionListResponse(**interactions_data)
+        
+    except Exception as e:
+        logger.error(f"Error getting tool interaction data: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error retrieving tool interaction data: {str(e)}"
         ) 

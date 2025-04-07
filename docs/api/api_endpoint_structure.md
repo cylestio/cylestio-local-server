@@ -40,7 +40,7 @@ Endpoints for aggregated metrics across the system:
 - `GET /api/v1/metrics/llm/request_count` - Get LLM request count metrics
 - `GET /api/v1/metrics/llm/token_usage` - Get LLM token usage metrics
 - `GET /api/v1/metrics/llm/response_time` - Get LLM response time metrics
-- `GET /api/v1/metrics/tool/execution_count` - Get tool execution count metrics
+- `GET /api/v1/metrics/tool_interactions` - Get comprehensive tool interaction data
 - `GET /api/v1/metrics/tool/success_rate` - Get tool success rate metrics
 - `GET /api/v1/metrics/error/count` - Get error count metrics
 - `GET /api/v1/metrics/session/count` - Get session count metrics

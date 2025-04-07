@@ -269,60 +269,70 @@ Similar to request_count endpoint (see above)
 
 ## Tool Metrics
 
-### Get Tool Execution Count
+### Get Comprehensive Tool Interaction Data
 
-Get tool execution count metrics with optional filtering and grouping.
+Get detailed information about tool interactions with rich filtering, sorting and pagination.
 
-**Endpoint**: `GET /v1/metrics/tool/execution_count`
+**Endpoint**: `GET /v1/metrics/tool_interactions`
 
 **Query Parameters**:
-Similar to LLM metrics endpoints (see above)
+- `agent_id` (string, optional): Filter by agent ID
+- `from_time` (datetime, optional): Start time (ISO format)
+- `to_time` (datetime, optional): End time (ISO format)
+- `time_range` (string, default: "30d"): Predefined time range (1h, 1d, 7d, 30d)
+- `tool_name` (string, optional): Filter by specific tool name
+- `status` (string, optional): Filter by execution status (success, error, pending)
+- `framework_name` (string, optional): Filter by framework name
+- `interaction_type` (string, optional): Filter by interaction type (execution, result)
+- `sort_by` (string, default: "request_timestamp"): Field to sort by
+- `sort_dir` (string, default: "desc"): Sort direction (asc, desc)
+- `page` (integer, default: 1): Page number
+- `page_size` (integer, default: 20, max: 100): Page size
 
 **Response**:
 ```json
 {
-  "metric": "tool.execution_count",
+  "total": 145,
+  "page": 1,
+  "page_size": 20,
   "from_time": "2024-03-01T00:00:00.000Z",
   "to_time": "2024-03-31T23:59:59.999Z",
-  "interval": "1d",
-  "data": [
+  "interactions": [
     {
-      "timestamp": "2024-03-01T00:00:00.000Z",
-      "value": 287
+      "id": 123,
+      "event_id": 456,
+      "tool_name": "web_search",
+      "interaction_type": "execution",
+      "status": "success",
+      "status_code": 200,
+      "parameters": {
+        "query": "weather in San Francisco",
+        "limit": 5
+      },
+      "result": {
+        "temperature": "72°F",
+        "conditions": "Sunny"
+      },
+      "error": null,
+      "request_timestamp": "2024-03-15T14:30:00.000Z",
+      "response_timestamp": "2024-03-15T14:30:01.250Z",
+      "duration_ms": 1250,
+      "framework_name": "langchain",
+      "tool_version": "1.2.3",
+      "authorization_level": "user",
+      "execution_time_ms": 1150,
+      "cache_hit": false,
+      "api_version": "v2",
+      "raw_attributes": {
+        "tool.name": "web_search",
+        "tool.params": {"query": "weather in San Francisco", "limit": 5},
+        "framework.name": "langchain"
+      },
+      "span_id": "span123",
+      "trace_id": "trace456",
+      "agent_id": "agent789"
     },
-    {
-      "timestamp": "2024-03-02T00:00:00.000Z",
-      "value": 312
-    }
-  ]
-}
-```
-
-### Get Tool Success Rate
-
-Get tool success rate metrics with optional filtering and grouping.
-
-**Endpoint**: `GET /v1/metrics/tool/success_rate`
-
-**Query Parameters**:
-Similar to LLM metrics endpoints (see above)
-
-**Response**:
-```json
-{
-  "metric": "tool.success_rate",
-  "from_time": "2024-03-01T00:00:00.000Z",
-  "to_time": "2024-03-31T23:59:59.999Z",
-  "interval": "1d",
-  "data": [
-    {
-      "timestamp": "2024-03-01T00:00:00.000Z",
-      "value": 0.95  // 95% success rate
-    },
-    {
-      "timestamp": "2024-03-02T00:00:00.000Z",
-      "value": 0.97  // 97% success rate
-    }
+    // More interactions...
   ]
 }
 ```
@@ -539,65 +549,6 @@ async function createTokenUsageDashboard() {
       cost: d.estimated_cost
     }))
   });
-}
-```
-
-### Get Tool Usage Analytics
-
-Get aggregated tool usage analytics across all agents.
-
-**Endpoint**: `GET /v1/metrics/tools`
-
-**Query Parameters**:
-- `from_time` (datetime, optional): Start time (ISO format)
-- `to_time` (datetime, optional): End time (ISO format)
-- `time_range` (string, default: "30d"): Predefined time range ("1h", "1d", "7d", "30d")
-- `interval` (string, optional): Aggregation interval ("1m", "1h", "1d", "7d")
-- `group_by` (string, default: "tool.name"): Dimension to group by
-
-**Response**:
-```json
-{
-  "metric": "tool.usage",
-  "from_time": "2024-03-01T00:00:00.000Z",
-  "to_time": "2024-03-31T23:59:59.999Z",
-  "interval": null,
-  "data": [
-    {
-      "dimensions": {
-        "tool.name": "database_query"
-      },
-      "executions": 3750,
-      "success_count": 3675,
-      "error_count": 75,
-      "success_rate": 0.98,
-      "avg_duration_ms": 120
-    },
-    {
-      "dimensions": {
-        "tool.name": "web_search"
-      },
-      "executions": 2500,
-      "success_count": 2375,
-      "error_count": 125,
-      "success_rate": 0.95,
-      "avg_duration_ms": 850
-    },
-    {
-      "dimensions": {
-        "tool.name": "file_operation"
-      },
-      "executions": 2000,
-      "success_count": 1940,
-      "error_count": 60,
-      "success_rate": 0.97,
-      "avg_duration_ms": 75
-    }
-  ],
-  "totals": {
-    "executions": 8250,
-    "success_rate": 0.97
-  }
 }
 ```
 

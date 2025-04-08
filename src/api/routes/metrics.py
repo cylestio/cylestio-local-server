@@ -1291,7 +1291,7 @@ async def get_llm_models_pricing(
     
     try:
         # Define path to CSV file
-        csv_path = os.path.join("resources", "full_llm_models_pricing_apr2025.csv")
+        csv_path = os.path.join("resources", "full_llm_models_pricing_08April2025.csv")
         
         # Check if file exists
         if not os.path.exists(csv_path):
@@ -1327,10 +1327,14 @@ async def get_llm_models_pricing(
                 
                 pricing_data.append(processed_row)
         
+        # Extract update date from filename
+        update_date = "April 8, 2025"
+        
         # Format data to match the UI view
         result = {
             "models": pricing_data,
-            "total_count": len(pricing_data)
+            "total_count": len(pricing_data),
+            "update_date": update_date
         }
         
         return result
@@ -1393,7 +1397,7 @@ async def calculate_token_usage_cost(
         token_usage_by_model = token_usage_result.items # Access items from QueryResult
 
         # Load model pricing data
-        csv_path = os.path.join("resources", "full_llm_models_pricing_apr2025.csv")
+        csv_path = os.path.join("resources", "full_llm_models_pricing_08April2025.csv")
         model_pricing = {}
         with open(csv_path, mode='r', encoding='utf-8') as csv_file:
             csv_reader = csv.DictReader(csv_file)
@@ -1632,38 +1636,23 @@ async def calculate_token_usage_cost(
                 'total_cost': round(model_total_cost, 4)  # Total cost for this model
             })
 
-        # Prepare response matching the UI
+        # Assemble the final response
         result = {
-            "total_tokens": {
-                "value": total_tokens,
-                "description": "Across all models"
-            },
-            "estimated_cost": {
-                "value": round(total_cost, 2),
-                "description": "Based on standard pricing"
-            },
-            "models_used": {
-                "value": len(cost_breakdown),
-                "description": "Active in this period"
-            },
-            "cost_breakdown": cost_breakdown,
-            "totals": {
-                "model": "Total", # Match UI
-                "input_tokens": total_input_tokens,
-                "input_cost": round(total_input_cost, 4),
-                "output_tokens": total_output_tokens,
-                "output_cost": round(total_output_cost, 4),
-                "total_tokens": total_tokens, # Redundant but matches UI totals row
-                "total_cost": round(total_cost, 4)
+            "token_usage_cost": {
+                "breakdown": cost_breakdown,
+                "totals": {
+                    "input_tokens": total_input_tokens,
+                    "output_tokens": total_output_tokens,
+                    "total_tokens": total_tokens,
+                    "input_cost": total_input_cost,
+                    "output_cost": total_output_cost,
+                    "total_cost": total_input_cost + total_output_cost
+                }
             },
             "pricing_note": "Input and output prices are per 1,000 tokens. Costs are calculated as (tokens/1000) * price.",
-            "time_period": {
-                "start": start_time.isoformat(),
-                "end": end_time.isoformat(),
-                "description": f"Data for period: {time_range}"
-            }
+            "update_date": "April 8, 2025"
         }
-
+        
         return result
 
     except Exception as e:

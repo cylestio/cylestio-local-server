@@ -131,4 +131,68 @@ class ToolInteractionListResponse(BaseModel):
     page_size: int = Field(..., description="Page size")
     from_time: datetime = Field(..., description="Query start time")
     to_time: datetime = Field(..., description="Query end time")
-    interactions: List[ToolInteractionDetailItem] = Field(..., description="List of tool interactions") 
+    interactions: List[ToolInteractionDetailItem] = Field(..., description="List of tool interactions")
+
+class TimeGranularity(str, Enum):
+    """Time granularity options for LLM metrics"""
+    MINUTE = "minute"
+    HOUR = "hour"
+    DAY = "day"
+
+class LLMMetricsFilter(BaseModel):
+    """Schema for LLM metrics filters"""
+    agent_id: Optional[str] = Field(None, description="Filter by agent ID")
+    model_name: Optional[str] = Field(None, description="Filter by model name")
+    from_time: Optional[datetime] = Field(None, description="Start time (ISO format)")
+    to_time: Optional[datetime] = Field(None, description="End time (ISO format)")
+    granularity: Optional[TimeGranularity] = Field(TimeGranularity.DAY, description="Time granularity")
+    
+    @validator('to_time')
+    def validate_time_range(cls, to_time, values):
+        from_time = values.get('from_time')
+        
+        if (from_time is None and to_time is not None) or (from_time is not None and to_time is None):
+            raise ValueError("Both from_time and to_time must be provided together")
+            
+        if from_time is not None and to_time is not None and from_time >= to_time:
+            raise ValueError("from_time must be before to_time")
+            
+        return to_time
+
+class LLMMetricsBreakdown(str, Enum):
+    """Breakdown options for LLM metrics"""
+    NONE = "none"
+    AGENT = "agent"
+    MODEL = "model"
+    TIME = "time"
+
+class LLMMetricsResponse(BaseModel):
+    """Schema for LLM metrics response"""
+    request_count: int = Field(..., description="Total number of LLM requests")
+    response_time_avg: float = Field(..., description="Average response time in ms")
+    response_time_p95: float = Field(..., description="95th percentile response time in ms")
+    success_rate: float = Field(..., description="Success rate (0-1)")
+    error_rate: float = Field(..., description="Error rate (0-1)")
+    token_count_input: int = Field(..., description="Total input tokens")
+    token_count_output: int = Field(..., description="Total output tokens")
+    token_count_total: int = Field(..., description="Total tokens")
+    estimated_cost_usd: float = Field(..., description="Estimated cost in USD")
+    first_seen: Optional[datetime] = Field(None, description="First seen timestamp")
+    last_seen: Optional[datetime] = Field(None, description="Last seen timestamp")
+    
+class LLMMetricsBreakdownItem(BaseModel):
+    """Schema for a single item in a breakdown response"""
+    key: str = Field(..., description="Breakdown key (agent ID, model name, or timestamp)")
+    metrics: LLMMetricsResponse = Field(..., description="Metrics for this item")
+    relation_type: Optional[str] = Field(None, description="For agent-model relationships, specifies the type (primary, fallback, etc.)")
+    time_distribution: Optional[List[Dict[str, Any]]] = Field(None, description="Optional time-based distribution data for histograms")
+    token_distribution: Optional[List[Dict[str, Any]]] = Field(None, description="Optional token count distribution data for histograms")
+
+class LLMMetricsBreakdownResponse(BaseModel):
+    """Schema for LLM metrics breakdown response"""
+    total: LLMMetricsResponse = Field(..., description="Aggregated metrics") 
+    breakdown: List[LLMMetricsBreakdownItem] = Field(..., description="Breakdown items")
+    from_time: datetime = Field(..., description="Query start time")
+    to_time: datetime = Field(..., description="Query end time")
+    filters: LLMMetricsFilter = Field(..., description="Applied filters")
+    breakdown_by: LLMMetricsBreakdown = Field(..., description="Breakdown dimension") 

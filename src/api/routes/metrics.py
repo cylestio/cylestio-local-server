@@ -9,7 +9,9 @@ from sqlalchemy.orm import Session
 
 from src.database.session import get_db
 from src.api.schemas.metrics import (
-    MetricResponse, DashboardResponse, ToolInteractionListResponse
+    MetricResponse, DashboardResponse, ToolInteractionListResponse,
+    LLMMetricsFilter, LLMMetricsBreakdownResponse, LLMMetricsBreakdown,
+    LLMMetricsBreakdownItem, TimeGranularity
 )
 from src.analysis.interface import (
     MetricQuery, TimeRangeParams, TimeSeriesParams, TimeResolution, MetricParams,
@@ -17,6 +19,7 @@ from src.analysis.interface import (
 )
 from src.analysis.metrics.token_metrics import TokenMetrics
 from src.analysis.metrics.tool_metrics import ToolMetrics
+from src.analysis.metrics.llm_analytics import LLMAnalytics
 from src.utils.logging import get_logger
 from src.analysis.utils import parse_time_range
 
@@ -95,7 +98,8 @@ async def get_dashboard(
 @router.get(
     "/metrics/llm/request_count",
     response_model=MetricResponse,
-    summary="Get LLM request count metrics"
+    summary="Get LLM request count metrics",
+    deprecated=True
 )
 async def get_llm_request_count(
     agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
@@ -109,10 +113,12 @@ async def get_llm_request_count(
     """
     Get LLM request count metrics with optional filtering and grouping.
     
+    **Deprecated**: Use `/metrics/llm/analytics` instead with `breakdown_by` parameter.
+    
     Returns:
         MetricResponse: LLM request count data points
     """
-    logger.info("Querying LLM request count metrics")
+    logger.info("Querying LLM request count metrics (deprecated)")
     
     # Parse dimensions if provided
     dimension_list = None
@@ -151,7 +157,8 @@ async def get_llm_request_count(
 
 @router.get(
     "/metrics/llm/token_usage",
-    summary="Get LLM token usage time series"
+    summary="Get LLM token usage time series",
+    deprecated=True
 )
 async def get_llm_token_usage(
     time_range: Optional[str] = Query("30d", description="Predefined time range (1h, 1d, 7d, 30d)"),
@@ -163,10 +170,12 @@ async def get_llm_token_usage(
     """
     Get LLM token usage time series data with filtering options.
     
+    **Deprecated**: Use `/metrics/llm/analytics` with `breakdown_by=time` instead.
+    
     Returns:
         Time series token usage data points with model and token type dimensions
     """
-    logger.info("Querying LLM token usage time series")
+    logger.info("Querying LLM token usage time series (deprecated)")
     
     try:
         # Validate time_range
@@ -289,7 +298,8 @@ async def get_llm_token_usage(
 @router.get(
     "/metrics/llm/response_time",
     response_model=MetricResponse,
-    summary="Get LLM response time metrics"
+    summary="Get LLM response time metrics",
+    deprecated=True
 )
 async def get_llm_response_time(
     agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
@@ -303,10 +313,12 @@ async def get_llm_response_time(
     """
     Get LLM response time metrics with optional filtering and grouping.
     
+    **Deprecated**: Use `/metrics/llm/analytics` instead.
+    
     Returns:
         MetricResponse: LLM response time data points
     """
-    logger.info("Querying LLM response time metrics")
+    logger.info("Querying LLM response time metrics (deprecated)")
     
     # Parse dimensions if provided
     dimension_list = None
@@ -614,7 +626,8 @@ def _extract_metric_value(metric_response: MetricResponse) -> Union[int, float]:
 @router.get(
     "/metrics/llms",
     response_model=MetricResponse,
-    summary="Get aggregated LLM usage metrics"
+    summary="Get aggregated LLM usage metrics",
+    deprecated=True
 )
 async def get_aggregated_llm_metrics(
     from_time: Optional[datetime] = Query(None, description="Start time (ISO format)"),
@@ -625,16 +638,14 @@ async def get_aggregated_llm_metrics(
     db: Session = Depends(get_db)
 ):
     """
-    Get aggregated LLM usage metrics across all agents, with breakdown by model.
+    Get aggregated LLM usage metrics with dimensions and filtering.
     
-    This endpoint provides a comprehensive view of LLM usage across the system,
-    including total requests, tokens, and costs. Results can be grouped by 
-    different dimensions like model, vendor, etc.
+    **Deprecated**: Use `/metrics/llm/models` instead.
     
     Returns:
-        MetricResponse: Aggregated LLM usage data points
+        MetricResponse: Aggregated LLM metrics
     """
-    logger.info("Querying aggregated LLM usage metrics")
+    logger.info("Querying aggregated LLM metrics (deprecated)")
     
     # Parse dimensions if provided
     dimension_list = None
@@ -677,7 +688,8 @@ async def get_aggregated_llm_metrics(
 @router.get(
     "/metrics/llms/requests",
     response_model=MetricResponse,
-    summary="Get LLM request metrics across all agents"
+    summary="Get LLM request metrics across all agents",
+    deprecated=True
 )
 async def get_llm_requests_metrics(
     from_time: Optional[datetime] = Query(None, description="Start time (ISO format)"),
@@ -688,15 +700,14 @@ async def get_llm_requests_metrics(
     db: Session = Depends(get_db)
 ):
     """
-    Get LLM request metrics across all agents with time series data.
+    Get LLM request metrics across all agents with optional grouping.
     
-    This endpoint provides time series data for request volume,
-    with optional grouping by model, agent, or status.
+    **Deprecated**: Use `/metrics/llm/analytics` instead.
     
     Returns:
-        MetricResponse: LLM request time series data
+        MetricResponse: LLM request metrics data
     """
-    logger.info("Querying LLM request metrics with time series")
+    logger.info("Querying LLM requests metrics (deprecated)")
     
     # Parse group_by if provided to create dimensions list
     dimension_list = None
@@ -1084,7 +1095,8 @@ async def get_session_analytics(
 @router.get(
     "/metrics/usage",
     response_model=MetricResponse,
-    summary="Get overall usage patterns"
+    summary="Get overall usage patterns",
+    deprecated=True
 )
 async def get_usage_patterns(
     from_time: Optional[datetime] = Query(None, description="Start time (ISO format)"),
@@ -1104,7 +1116,7 @@ async def get_usage_patterns(
     Returns:
         MetricResponse: Usage pattern data
     """
-    logger.info(f"Querying usage patterns, pattern type: {pattern}")
+    logger.info(f"Getting usage patterns with pattern: {pattern} (deprecated)")
     
     # Validate time_range if provided
     if time_range and time_range not in ["1h", "1d", "7d", "30d"]:
@@ -1660,4 +1672,374 @@ async def calculate_token_usage_cost(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error calculating token usage cost: {str(e)}"
+        )
+
+# New LLM analytics endpoints
+@router.get(
+    "/metrics/llm/analytics",
+    response_model=LLMMetricsBreakdownResponse,
+    summary="Get comprehensive LLM usage analytics"
+)
+async def get_llm_analytics(
+    agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
+    model_name: Optional[str] = Query(None, description="Filter by model name"),
+    from_time: Optional[datetime] = Query(None, description="Start time (ISO format)"),
+    to_time: Optional[datetime] = Query(None, description="End time (ISO format)"),
+    granularity: TimeGranularity = Query(TimeGranularity.DAY, description="Time granularity (minute, hour, day)"),
+    breakdown_by: LLMMetricsBreakdown = Query(LLMMetricsBreakdown.NONE, description="Dimension to break down by (none, agent, model, time)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get comprehensive LLM usage analytics with flexible filtering and breakdowns.
+    
+    This endpoint consolidates metrics across all LLM interactions, including:
+    - Request counts and success/error rates
+    - Response time metrics (avg, p95)
+    - Token usage and cost estimations
+    - First/last seen timestamps
+    
+    The response can be broken down by agent, model, or time to provide detailed analytics.
+    
+    Returns:
+        LLMMetricsBreakdownResponse: Comprehensive LLM analytics data
+    """
+    logger.info(f"Getting LLM analytics with breakdown by {breakdown_by}")
+    
+    try:
+        # Create filter object
+        filters = LLMMetricsFilter(
+            agent_id=agent_id,
+            model_name=model_name,
+            from_time=from_time,
+            to_time=to_time,
+            granularity=granularity
+        )
+        
+        logger.info(f"Created filters: {filters}")
+        
+        # Get analytics data
+        logger.info(f"Creating LLMAnalytics instance")
+        llm_analytics = LLMAnalytics(db)
+        
+        logger.info(f"Calling get_metrics with breakdown_by={breakdown_by}")
+        analytics_data = llm_analytics.get_metrics(filters, breakdown_by)
+        
+        logger.info(f"Successfully retrieved analytics data")
+        return analytics_data
+        
+    except Exception as e:
+        logger.error(f"Error getting LLM analytics: {str(e)}", exc_info=True)
+        logger.error(f"Exception type: {type(e)}")
+        logger.error(f"Exception args: {e.args}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving LLM analytics: {str(e)}"
+        )
+
+@router.get(
+    "/metrics/llm/models",
+    response_model=LLMMetricsBreakdownResponse,
+    summary="Get LLM model performance comparison"
+)
+async def get_llm_model_comparison(
+    agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
+    from_time: Optional[datetime] = Query(None, description="Start time (ISO format)"),
+    to_time: Optional[datetime] = Query(None, description="End time (ISO format)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get a comparison of different LLM models' performance metrics.
+    
+    This endpoint provides a breakdown of LLM analytics by model,
+    allowing users to compare different models' performance, cost,
+    and usage patterns.
+    
+    Returns:
+        LLMMetricsBreakdownResponse: Model comparison data
+    """
+    logger.info("Getting LLM model comparison")
+    
+    try:
+        # Create filter object
+        filters = LLMMetricsFilter(
+            agent_id=agent_id,
+            from_time=from_time,
+            to_time=to_time
+        )
+        
+        # Get analytics with model breakdown
+        llm_analytics = LLMAnalytics(db)
+        analytics_data = llm_analytics.get_metrics(filters, LLMMetricsBreakdown.MODEL)
+        
+        return analytics_data
+        
+    except Exception as e:
+        logger.error(f"Error getting LLM model comparison: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving LLM model comparison: {str(e)}"
+        )
+
+@router.get(
+    "/metrics/llm/usage_trends",
+    response_model=LLMMetricsBreakdownResponse,
+    summary="Get LLM usage trends over time"
+)
+async def get_llm_usage_trends(
+    agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
+    model_name: Optional[str] = Query(None, description="Filter by model name"),
+    from_time: Optional[datetime] = Query(None, description="Start time (ISO format)"),
+    to_time: Optional[datetime] = Query(None, description="End time (ISO format)"),
+    granularity: TimeGranularity = Query(TimeGranularity.DAY, description="Time granularity (minute, hour, day)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get LLM usage trends over time with flexible time granularity.
+    
+    This endpoint provides a breakdown of LLM analytics by time buckets,
+    showing trends in usage, performance, and costs over the specified period.
+    
+    Returns:
+        LLMMetricsBreakdownResponse: Time-based trend data
+    """
+    logger.info(f"Getting LLM usage trends with granularity {granularity}")
+    
+    try:
+        # Create filter object
+        filters = LLMMetricsFilter(
+            agent_id=agent_id,
+            model_name=model_name,
+            from_time=from_time,
+            to_time=to_time,
+            granularity=granularity
+        )
+        
+        # Get analytics with time breakdown
+        llm_analytics = LLMAnalytics(db)
+        analytics_data = llm_analytics.get_metrics(filters, LLMMetricsBreakdown.TIME)
+        
+        return analytics_data
+        
+    except Exception as e:
+        logger.error(f"Error getting LLM usage trends: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving LLM usage trends: {str(e)}"
+        )
+
+@router.get(
+    "/metrics/llm/agent_usage",
+    response_model=LLMMetricsBreakdownResponse,
+    summary="Get LLM usage by agent"
+)
+async def get_llm_agent_usage(
+    model_name: Optional[str] = Query(None, description="Filter by model name"),
+    from_time: Optional[datetime] = Query(None, description="Start time (ISO format)"),
+    to_time: Optional[datetime] = Query(None, description="End time (ISO format)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get LLM usage broken down by agent.
+    
+    This endpoint provides a breakdown of LLM analytics by agent,
+    showing which agents are using LLMs the most and their performance metrics.
+    
+    Returns:
+        LLMMetricsBreakdownResponse: Agent usage data
+    """
+    logger.info("Getting LLM usage by agent")
+    
+    try:
+        # Create filter object
+        filters = LLMMetricsFilter(
+            model_name=model_name,
+            from_time=from_time,
+            to_time=to_time
+        )
+        
+        # Get analytics with agent breakdown
+        llm_analytics = LLMAnalytics(db)
+        analytics_data = llm_analytics.get_metrics(filters, LLMMetricsBreakdown.AGENT)
+        
+        return analytics_data
+        
+    except Exception as e:
+        logger.error(f"Error getting LLM agent usage: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving LLM agent usage: {str(e)}"
         ) 
+
+@router.get(
+    "/metrics/llm/agent_model_relationships",
+    response_model=LLMMetricsBreakdownResponse,
+    summary="Get agent-model relationship analytics"
+)
+async def get_agent_model_relationships(
+    agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
+    model_name: Optional[str] = Query(None, description="Filter by model name"),
+    from_time: Optional[datetime] = Query(None, description="Start time (ISO format)"),
+    to_time: Optional[datetime] = Query(None, description="End time (ISO format)"),
+    granularity: TimeGranularity = Query(TimeGranularity.DAY, description="Time granularity (minute, hour, day)"),
+    include_distributions: bool = Query(False, description="Whether to include time and token distributions"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get comprehensive analytics on agent-model relationships.
+    
+    This endpoint provides rich data about which agents used which models, when they were used,
+    and usage statistics. Results can be visualized as histograms, trends, and other charts.
+    
+    The response includes:
+    - For each agent, what models it used
+    - When the models were used (with time granularity)
+    - Usage metrics (request count, tokens, cost, etc.)
+    - Optional time and token distributions for histograms
+    
+    Args:
+        agent_id: Optional agent ID to filter by
+        model_name: Optional model name to filter by
+        from_time: Start time in ISO format
+        to_time: End time in ISO format
+        granularity: Time resolution (minute, hour, day)
+        include_distributions: Whether to include time and token distributions for visualization
+    
+    Returns:
+        Comprehensive breakdown of agent-model relationships
+    """
+    logger.info("Querying agent-model relationship analytics")
+    
+    try:
+        # Parse time range
+        start_time, end_time = parse_time_range(from_time, to_time)
+        
+        # Create filter object
+        filters = LLMMetricsFilter(
+            agent_id=agent_id,
+            model_name=model_name,
+            from_time=start_time,
+            to_time=end_time,
+            granularity=granularity
+        )
+        
+        # Initialize analytics service
+        llm_analytics = LLMAnalytics(db)
+        
+        # Get metrics with nested breakdown (first by agent, then by model)
+        # This is a special case - we want to see for each agent, what models it used
+        agent_metrics = llm_analytics.get_metrics(filters, breakdown_by=LLMMetricsBreakdown.AGENT)
+        
+        # For each agent, get a breakdown by model
+        result_breakdown = []
+        
+        if agent_id:
+            # If agent_id is specified, only get model breakdown for that agent
+            model_filters = LLMMetricsFilter(
+                agent_id=agent_id,
+                from_time=start_time,
+                to_time=end_time,
+                granularity=granularity
+            )
+            model_metrics = llm_analytics.get_metrics(model_filters, breakdown_by=LLMMetricsBreakdown.MODEL)
+            
+            # Format the response with a single agent's model usage
+            for model_item in model_metrics.breakdown:
+                model_name = model_item.key
+                
+                # Determine if this is likely the primary or fallback model
+                # (Simple heuristic: highest token count is primary)
+                token_count = model_item.metrics.token_count_total
+                relation_type = "primary" if token_count > 1000 else "secondary"
+                
+                # Create the item with basic metrics
+                breakdown_item = LLMMetricsBreakdownItem(
+                    key=f"{agent_id}:{model_name}",
+                    metrics=model_item.metrics,
+                    relation_type=relation_type
+                )
+                
+                # Optionally add distribution data
+                if include_distributions:
+                    # Add time distribution for visualizing when this model was used
+                    time_distribution = llm_analytics.get_agent_model_time_distribution(
+                        agent_id, model_name, filters
+                    )
+                    breakdown_item.time_distribution = time_distribution
+                    
+                    # Add token distribution for visualizing token usage patterns
+                    token_distribution = llm_analytics.get_agent_model_token_distribution(
+                        agent_id, model_name, filters
+                    )
+                    breakdown_item.token_distribution = token_distribution
+                
+                result_breakdown.append(breakdown_item)
+        else:
+            # Otherwise, get model breakdowns for each agent
+            for agent_item in agent_metrics.breakdown:
+                current_agent_id = agent_item.key
+                
+                # Get models used by this agent
+                agent_filter = LLMMetricsFilter(
+                    agent_id=current_agent_id,
+                    from_time=start_time,
+                    to_time=end_time,
+                    granularity=granularity
+                )
+                
+                agent_model_metrics = llm_analytics.get_metrics(
+                    agent_filter, 
+                    breakdown_by=LLMMetricsBreakdown.MODEL
+                )
+                
+                # Add each agent-model combination to the results
+                for model_item in agent_model_metrics.breakdown:
+                    model_name = model_item.key
+                    
+                    # Determine if this is likely the primary or fallback model
+                    token_count = model_item.metrics.token_count_total
+                    relation_type = "primary" if token_count > 1000 else "secondary"
+                    
+                    # Create the item with basic metrics
+                    breakdown_item = LLMMetricsBreakdownItem(
+                        key=f"{current_agent_id}:{model_name}",
+                        metrics=model_item.metrics,
+                        relation_type=relation_type
+                    )
+                    
+                    # Optionally add distribution data
+                    if include_distributions:
+                        # Add time distribution for visualizing when this model was used
+                        time_distribution = llm_analytics.get_agent_model_time_distribution(
+                            current_agent_id, model_name, filters
+                        )
+                        breakdown_item.time_distribution = time_distribution
+                        
+                        # Add token distribution for visualizing token usage patterns
+                        token_distribution = llm_analytics.get_agent_model_token_distribution(
+                            current_agent_id, model_name, filters
+                        )
+                        breakdown_item.token_distribution = token_distribution
+                    
+                    result_breakdown.append(breakdown_item)
+        
+        # Create final response
+        response = LLMMetricsBreakdownResponse(
+            total=agent_metrics.total,
+            breakdown=result_breakdown,
+            from_time=start_time,
+            to_time=end_time,
+            filters=filters,
+            breakdown_by=LLMMetricsBreakdown.AGENT
+        )
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error getting agent-model relationship metrics: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving agent-model relationship metrics: {str(e)}"
+        )

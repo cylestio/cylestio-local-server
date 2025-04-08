@@ -131,141 +131,312 @@ async function getDashboardMetrics(timeRange = '30d', agentId = null) {
 }
 ```
 
-## LLM Metrics
+## LLM Analytics API
 
-### Get LLM Request Count
+The LLM Analytics API provides comprehensive metrics about language model usage in your AI agents.
 
-Get LLM request count metrics with optional filtering and grouping.
+### LLM Analytics Endpoint
 
-**Endpoint**: `GET /v1/metrics/llm/request_count`
+**Endpoint**: `GET /v1/metrics/llm/analytics`
+
+**Query Parameters**:
+- `agent_id` (string, optional): Filter by agent ID
+- `model_name` (string, optional): Filter by model name
+- `from_time` (datetime, optional): Start time (ISO format)
+- `to_time` (datetime, optional): End time (ISO format)
+- `granularity` (string, default: "day"): Time granularity ("minute", "hour", "day")
+- `breakdown_by` (string, default: "none"): Dimension to break down by ("none", "agent", "model", "time")
+
+**Response**:
+```json
+{
+  "total": {
+    "request_count": 325,
+    "response_time_avg": 824.56,
+    "response_time_p95": 1450.32,
+    "success_rate": 0.97,
+    "error_rate": 0.03,
+    "token_count_input": 15240,
+    "token_count_output": 8732,
+    "token_count_total": 23972,
+    "estimated_cost_usd": 0.47,
+    "first_seen": "2023-04-01T00:00:00Z",
+    "last_seen": "2023-04-30T23:59:59Z"
+  },
+  "breakdown": [
+    {
+      "key": "gpt-4",
+      "metrics": {
+        "request_count": 125,
+        "response_time_avg": 1200.34,
+        "response_time_p95": 1820.45,
+        "success_rate": 0.99,
+        "error_rate": 0.01,
+        "token_count_input": 8240,
+        "token_count_output": 5500,
+        "token_count_total": 13740,
+        "estimated_cost_usd": 0.412,
+        "first_seen": "2023-04-01T00:00:00Z",
+        "last_seen": "2023-04-30T23:59:59Z"
+      }
+    }
+  ],
+  "from_time": "2023-04-01T00:00:00Z",
+  "to_time": "2023-04-30T23:59:59Z",
+  "filters": {
+    "agent_id": null,
+    "model_name": null,
+    "from_time": "2023-04-01T00:00:00Z",
+    "to_time": "2023-04-30T23:59:59Z",
+    "granularity": "day"
+  },
+  "breakdown_by": "model"
+}
+```
+
+### LLM Model Comparison Endpoint
+
+**Endpoint**: `GET /v1/metrics/llm/models`
 
 **Query Parameters**:
 - `agent_id` (string, optional): Filter by agent ID
 - `from_time` (datetime, optional): Start time (ISO format)
 - `to_time` (datetime, optional): End time (ISO format)
-- `time_range` (string, default: "30d"): Predefined time range ("1h", "1d", "7d", "30d")
-- `interval` (string, optional): Aggregation interval ("1m", "1h", "1d", "7d")
-- `dimensions` (string, optional): Comma-separated list of dimensions to group by
+
+**Response**: Same format as `/v1/metrics/llm/analytics` with `breakdown_by` set to "model".
+
+### LLM Usage Trends Endpoint
+
+**Endpoint**: `GET /v1/metrics/llm/usage_trends`
+
+**Query Parameters**:
+- `agent_id` (string, optional): Filter by agent ID
+- `model_name` (string, optional): Filter by model name
+- `from_time` (datetime, optional): Start time (ISO format)
+- `to_time` (datetime, optional): End time (ISO format)
+- `granularity` (string, default: "day"): Time granularity ("minute", "hour", "day")
+
+**Response**: Same format as `/v1/metrics/llm/analytics` with `breakdown_by` set to "time".
+
+### LLM Agent Usage Endpoint
+
+**Endpoint**: `GET /v1/metrics/llm/agent_usage`
+
+**Query Parameters**:
+- `model_name` (string, optional): Filter by model name
+- `from_time` (datetime, optional): Start time (ISO format)
+- `to_time` (datetime, optional): End time (ISO format)
+
+**Response**: Same format as `/v1/metrics/llm/analytics` with `breakdown_by` set to "agent".
+
+### LLM Agent-Model Relationships Endpoint
+
+**Endpoint**: `GET /v1/metrics/llm/agent_model_relationships`
+
+This endpoint provides rich data about which agents used which models, when they were used, and usage statistics. Results can be visualized as histograms, trends, and other charts.
+
+**Query Parameters**:
+- `agent_id` (string, optional): Filter by agent ID
+- `model_name` (string, optional): Filter by model name
+- `from_time` (datetime, optional): Start time (ISO format)
+- `to_time` (datetime, optional): End time (ISO format)
+- `granularity` (string, default: "day"): Time granularity ("minute", "hour", "day")
+- `include_distributions` (boolean, default: false): Whether to include time and token distributions for visualization
 
 **Response**:
 ```json
 {
-  "metric": "llm.request_count",
-  "from_time": "2024-03-01T00:00:00.000Z",
-  "to_time": "2024-03-31T23:59:59.999Z",
-  "interval": "1d",
-  "data": [
+  "total": {
+    "request_count": 325,
+    "response_time_avg": 824.56,
+    "response_time_p95": 1450.32,
+    "success_rate": 0.97,
+    "error_rate": 0.03,
+    "token_count_input": 15240,
+    "token_count_output": 8732,
+    "token_count_total": 23972,
+    "estimated_cost_usd": 0.47,
+    "first_seen": "2023-04-01T00:00:00Z",
+    "last_seen": "2023-04-30T23:59:59Z"
+  },
+  "breakdown": [
     {
-      "timestamp": "2024-03-01T00:00:00.000Z",
-      "value": 425
-    },
-    {
-      "timestamp": "2024-03-02T00:00:00.000Z",
-      "value": 387
+      "key": "support-agent:gpt-4",
+      "metrics": {
+        "request_count": 125,
+        "response_time_avg": 1200.34,
+        "response_time_p95": 1820.45,
+        "success_rate": 0.99,
+        "error_rate": 0.01,
+        "token_count_input": 8240,
+        "token_count_output": 5500,
+        "token_count_total": 13740,
+        "estimated_cost_usd": 0.412,
+        "first_seen": "2023-04-01T00:00:00Z",
+        "last_seen": "2023-04-30T23:59:59Z"
+      },
+      "relation_type": "primary",
+      "time_distribution": [
+        {
+          "timestamp": "2023-04-01T00:00:00Z",
+          "request_count": 42,
+          "input_tokens": 2800,
+          "output_tokens": 1850,
+          "total_tokens": 4650,
+          "avg_duration": 1150.25
+        },
+        {
+          "timestamp": "2023-04-02T00:00:00Z",
+          "request_count": 38,
+          "input_tokens": 2500,
+          "output_tokens": 1700,
+          "total_tokens": 4200,
+          "avg_duration": 1220.75
+        }
+      ],
+      "token_distribution": [
+        {
+          "bucket_range": "0-100",
+          "lower_bound": 0,
+          "upper_bound": 100,
+          "request_count": 12,
+          "input_tokens": 480,
+          "output_tokens": 320,
+          "total_tokens": 800,
+          "avg_duration": 850.45
+        },
+        {
+          "bucket_range": "100-500",
+          "lower_bound": 100,
+          "upper_bound": 500,
+          "request_count": 85,
+          "input_tokens": 5460,
+          "output_tokens": 3680,
+          "total_tokens": 9140,
+          "avg_duration": 1100.32
+        }
+      ]
     }
-  ]
+  ],
+  "from_time": "2023-04-01T00:00:00Z",
+  "to_time": "2023-04-30T23:59:59Z",
+  "filters": {
+    "agent_id": "support-agent",
+    "model_name": null,
+    "from_time": "2023-04-01T00:00:00Z",
+    "to_time": "2023-04-30T23:59:59Z",
+    "granularity": "day"
+  },
+  "breakdown_by": "agent"
 }
 ```
 
-### Example: Grouped LLM Request Count by Model
+### Example: Getting Agent-Model Relationship Data
 
 ```typescript
-// Web App Dashboard code example
-async function getLLMRequestCountByModel(timeRange = '7d') {
+// Get relationship between agents and models with time distribution
+async function getAgentModelRelationships(agentId = null, includeDistributions = true) {
   const params = new URLSearchParams({
-    time_range: timeRange,
-    interval: '1d',
-    dimensions: 'llm.model'
+    include_distributions: includeDistributions.toString()
+  });
+  
+  if (agentId) {
+    params.append('agent_id', agentId);
+  }
+
+  const response = await fetch(`/v1/metrics/llm/agent_model_relationships?${params.toString()}`, {
+    method: 'GET'
   });
 
-  const response = await fetch(`/v1/metrics/llm/request_count?${params.toString()}`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json'
-    }
-  });
-
-  const data = await response.json();
-  
-  // Restructure data for chart visualization
-  const models = [...new Set(data.data.map(d => d.dimensions['llm.model']))];
-  const timestamps = [...new Set(data.data.map(d => d.timestamp))];
-  
-  const chartData = {
-    labels: timestamps.map(ts => new Date(ts).toLocaleDateString()),
-    datasets: models.map(model => ({
-      label: model,
-      data: timestamps.map(ts => {
-        const point = data.data.find(d => 
-          d.timestamp === ts && 
-          d.dimensions['llm.model'] === model
-        );
-        return point ? point.value : 0;
-      })
-    }))
-  };
-  
-  return chartData;
+  return await response.json();
 }
 ```
 
-### Get LLM Token Usage
+### Example: Visualizing Agent-Model Relationships
 
-Get LLM token usage metrics with optional filtering and grouping.
+```typescript
+// Example usage for rendering model usage per agent
+function renderAgentModelUsage(data) {
+  // For each breakdown item (agent:model combination)
+  data.breakdown.forEach(item => {
+    const [agentId, modelName] = item.key.split(':');
+    
+    // Create a card or section for each agent-model combination
+    const card = document.createElement('div');
+    card.className = 'agent-model-card';
+    
+    // Add basic metrics
+    card.innerHTML = `
+      <h3>${agentId} - ${modelName}</h3>
+      <p>Relationship: <strong>${item.relation_type}</strong></p>
+      <p>Total requests: ${item.metrics.request_count}</p>
+      <p>Total tokens: ${item.metrics.token_count_total}</p>
+      <p>Estimated cost: $${item.metrics.estimated_cost_usd.toFixed(2)}</p>
+    `;
+    
+    // If time distribution is included, render a timeline chart
+    if (item.time_distribution) {
+      const timeChartCanvas = document.createElement('canvas');
+      timeChartCanvas.id = `time-chart-${agentId}-${modelName}`;
+      card.appendChild(timeChartCanvas);
+      
+      renderTimelineChart(timeChartCanvas, item.time_distribution);
+    }
+    
+    // If token distribution is included, render a histogram
+    if (item.token_distribution) {
+      const tokenChartCanvas = document.createElement('canvas');
+      tokenChartCanvas.id = `token-chart-${agentId}-${modelName}`;
+      card.appendChild(tokenChartCanvas);
+      
+      renderTokenHistogram(tokenChartCanvas, item.token_distribution);
+    }
+    
+    // Add the card to the page
+    document.getElementById('agent-model-container').appendChild(card);
+  });
+}
+```
+
+## Deprecated Endpoints
+
+The following endpoints are now deprecated and have been replaced by the newer, more comprehensive endpoints described above:
+
+### ~~Get LLM Request Count~~ (Deprecated)
+
+**Endpoint**: `GET /v1/metrics/llm/request_count`
+
+Use `/v1/metrics/llm/analytics` instead.
+
+### ~~Get LLM Token Usage~~ (Deprecated)
 
 **Endpoint**: `GET /v1/metrics/llm/token_usage`
 
-**Query Parameters**:
-Similar to request_count endpoint (see above)
+Use `/v1/metrics/llm/analytics` instead.
 
-**Response**:
-```json
-{
-  "metric": "llm.token_usage",
-  "from_time": "2024-03-01T00:00:00.000Z",
-  "to_time": "2024-03-31T23:59:59.999Z",
-  "interval": "1d",
-  "data": [
-    {
-      "timestamp": "2024-03-01T00:00:00.000Z",
-      "value": 42500
-    },
-    {
-      "timestamp": "2024-03-02T00:00:00.000Z",
-      "value": 38700
-    }
-  ]
-}
-```
-
-### Get LLM Response Time
-
-Get LLM response time metrics with optional filtering and grouping.
+### ~~Get LLM Response Time~~ (Deprecated)
 
 **Endpoint**: `GET /v1/metrics/llm/response_time`
 
-**Query Parameters**:
-Similar to request_count endpoint (see above)
+Use `/v1/metrics/llm/analytics` instead.
 
-**Response**:
-```json
-{
-  "metric": "llm.response_time",
-  "from_time": "2024-03-01T00:00:00.000Z",
-  "to_time": "2024-03-31T23:59:59.999Z",
-  "interval": "1d",
-  "data": [
-    {
-      "timestamp": "2024-03-01T00:00:00.000Z",
-      "value": 2350  // milliseconds
-    },
-    {
-      "timestamp": "2024-03-02T00:00:00.000Z",
-      "value": 2480  // milliseconds
-    }
-  ]
-}
-```
+### ~~Get Aggregated LLM Metrics~~ (Deprecated)
+
+**Endpoint**: `GET /v1/metrics/llms`
+
+Use `/v1/metrics/llm/analytics` instead.
+
+### ~~Get LLM Request Metrics~~ (Deprecated)
+
+**Endpoint**: `GET /v1/metrics/llms/requests`
+
+Use `/v1/metrics/llm/analytics` instead.
+
+### ~~Get Overall Usage Patterns~~ (Deprecated)
+
+**Endpoint**: `GET /v1/metrics/usage`
+
+Use `/v1/metrics/llm/usage_trends` instead.
 
 ## Tool Metrics
 

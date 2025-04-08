@@ -231,61 +231,40 @@ def _fill_missing_time_points(
     return filled_data
 
 
-def sql_time_bucket(timestamp_column, resolution: 'TimeResolution') -> text:
+def sql_time_bucket(column, granularity) -> text:
     """
-    Generate SQL expression for time bucketing based on resolution.
+    Generate SQL expression for time bucketing based on granularity.
     
     Args:
-        timestamp_column: SQLAlchemy column to bucket
-        resolution: Time resolution (minute, hour, day, week, month)
+        column: SQLAlchemy column to bucket
+        granularity: TimeGranularity enum or string value
         
     Returns:
         SQLAlchemy text expression for time bucketing
     """
     import sqlalchemy as sa
-    from sqlalchemy.dialects import sqlite, mysql, postgresql
     
-    resolution_value = resolution.value if hasattr(resolution, 'value') else resolution
-    
-    # Always default to SQLite for the local server implementation
-    # The current implementation uses SQLite as the database
-    dialect_is_sqlite = True
-    
-    # For SQLite, use strftime
-    if dialect_is_sqlite:
-        if resolution_value == 'minute':
-            return sa.func.strftime('%Y-%m-%d %H:%M', timestamp_column)
-        elif resolution_value == 'hour':
-            return sa.func.strftime('%Y-%m-%d %H', timestamp_column)
-        elif resolution_value == 'day':
-            return sa.func.strftime('%Y-%m-%d', timestamp_column)
-        elif resolution_value == 'week':
-            # SQLite doesn't have a simple function for week bucketing
-            # Using start of day instead of week to simplify and avoid errors
-            return sa.func.strftime('%Y-%m-%d', timestamp_column)
-        elif resolution_value == 'month':
-            return sa.func.strftime('%Y-%m', timestamp_column)
-        else:
-            # Default to day
-            return sa.func.strftime('%Y-%m-%d', timestamp_column)
+    # Extract value from enum if necessary
+    if hasattr(granularity, 'value'):
+        granularity_value = granularity.value
     else:
-        # For MySQL/PostgreSQL, use date_format
-        if resolution_value == 'minute':
-            return sa.func.date_format(timestamp_column, '%Y-%m-%d %H:%i')
-        elif resolution_value == 'hour':
-            return sa.func.date_format(timestamp_column, '%Y-%m-%d %H')
-        elif resolution_value == 'day':
-            return sa.func.date_format(timestamp_column, '%Y-%m-%d')
-        elif resolution_value == 'week':
-            # Using date of the first day of the week
-            day_of_week = sa.func.dayofweek(timestamp_column)
-            week_start = sa.func.date_sub(timestamp_column, text(f'interval ({day_of_week}-1) day'))
-            return sa.func.date_format(week_start, '%Y-%m-%d')
-        elif resolution_value == 'month':
-            return sa.func.date_format(timestamp_column, '%Y-%m')
-        else:
-            # Default to day
-            return sa.func.date_format(timestamp_column, '%Y-%m-%d')
+        granularity_value = str(granularity)
+    
+    # Always use SQLite for local server
+    if granularity_value == 'minute':
+        return sa.func.strftime('%Y-%m-%d %H:%M:00', column)
+    elif granularity_value == 'hour':
+        return sa.func.strftime('%Y-%m-%d %H:00:00', column)
+    elif granularity_value == 'day':
+        return sa.func.strftime('%Y-%m-%d 00:00:00', column)
+    elif granularity_value == 'week':
+        # SQLite weekly bucketing (first day of the week)
+        return sa.func.strftime('%Y-%W', column)
+    elif granularity_value == 'month':
+        return sa.func.strftime('%Y-%m-01', column)
+    else:
+        # Default to day if granularity is not recognized
+        return sa.func.strftime('%Y-%m-%d 00:00:00', column)
 
 
 def calculate_token_cost(input_tokens: int, output_tokens: int, model: str) -> float:

@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any, Union
 
 from fastapi import APIRouter, Depends, Query, HTTPException, status, Path
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 
 from src.database.session import get_db
@@ -415,4 +415,203 @@ async def get_security_alerts_timeseries(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving security alerts time series: {str(e)}"
+        )
+
+@router.get(
+    "/alerts/{alert_id}",
+    response_model=Dict[str, Any],
+    summary="Get detailed information about a specific security alert"
+)
+async def get_security_alert_details(
+    alert_id: int = Path(..., description="Security alert ID"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get detailed information about a specific security alert, including:
+    - The alert details
+    - The event that triggered it
+    - Related events in the same trace/span
+    - Associated LLM interactions
+    - Associated tool interactions
+    - Framework events
+    - Host metadata
+    
+    Returns:
+        Dict[str, Any]: Detailed security alert information
+    """
+    logger.info(f"Getting details for security alert: {alert_id}")
+    
+    try:
+        # Get the security alert
+        alert = db.query(SecurityAlert).filter(SecurityAlert.id == alert_id).first()
+        if not alert:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Security alert with ID {alert_id} not found"
+            )
+            
+        # Get the base event with all relationships loaded
+        event = db.query(Event).options(
+            joinedload(Event.session),
+            joinedload(Event.trace),
+            joinedload(Event.span),
+            joinedload(Event.llm_interaction),
+            joinedload(Event.tool_interaction),
+            joinedload(Event.framework_event)
+        ).filter(Event.id == alert.event_id).first()
+        
+        if not event:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Associated event not found"
+            )
+            
+        # Get triggering events
+        triggering_events = []
+        for trigger in alert.triggered_by:
+            triggering_event = trigger.triggering_event
+            if triggering_event:
+                triggering_events.append({
+                    "id": triggering_event.id,
+                    "name": triggering_event.name,
+                    "timestamp": triggering_event.timestamp.isoformat(),
+                    "type": triggering_event.event_type,
+                    "level": triggering_event.level
+                })
+                
+        # Get related events in the same trace/span
+        related_events = []
+        if event.span_id:
+            # Get all events in the same span with session data loaded
+            span_events = db.query(Event).options(
+                joinedload(Event.session)
+            ).filter(
+                Event.span_id == event.span_id,
+                Event.id != event.id
+            ).order_by(Event.timestamp).all()
+            
+            for span_event in span_events:
+                related_events.append({
+                    "id": span_event.id,
+                    "name": span_event.name,
+                    "timestamp": span_event.timestamp.isoformat(),
+                    "type": span_event.event_type,
+                    "level": span_event.level,
+                    "span_id": span_event.span_id,
+                    "trace_id": span_event.trace_id,
+                    "session_id": span_event.session_id
+                })
+                
+        # Get LLM interactions
+        llm_interactions = []
+        if event.llm_interaction:
+            llm_interactions.append({
+                "id": event.llm_interaction.id,
+                "interaction_type": event.llm_interaction.interaction_type,
+                "vendor": event.llm_interaction.vendor,
+                "model": event.llm_interaction.model,
+                "request_timestamp": event.llm_interaction.request_timestamp.isoformat() if event.llm_interaction.request_timestamp else None,
+                "response_timestamp": event.llm_interaction.response_timestamp.isoformat() if event.llm_interaction.response_timestamp else None,
+                "duration_ms": event.llm_interaction.duration_ms,
+                "input_tokens": event.llm_interaction.input_tokens,
+                "output_tokens": event.llm_interaction.output_tokens,
+                "total_tokens": event.llm_interaction.total_tokens
+            })
+            
+        # Get tool interactions
+        tool_interactions = []
+        if event.tool_interaction:
+            tool_interactions.append({
+                "id": event.tool_interaction.id,
+                "tool_name": event.tool_interaction.tool_name,
+                "tool_id": event.tool_interaction.tool_id,
+                "interaction_type": event.tool_interaction.interaction_type,
+                "status": event.tool_interaction.status,
+                "result_type": event.tool_interaction.result_type,
+                "framework_name": event.tool_interaction.framework_name,
+                "framework_type": event.tool_interaction.framework_type
+            })
+            
+        # Get framework events
+        framework_events = []
+        if event.framework_event:
+            framework_events.append({
+                "id": event.framework_event.id,
+                "framework_name": event.framework_event.framework_name,
+                "framework_type": event.framework_event.framework_type,
+                "action": event.framework_event.action,
+                "patch_type": event.framework_event.patch_type,
+                "version": event.framework_event.version
+            })
+            
+        # Get span information if available
+        span_info = None
+        if event.span:
+            span_info = {
+                "span_id": event.span.span_id,
+                "name": event.span.name,
+                "start_timestamp": event.span.start_timestamp.isoformat() if event.span.start_timestamp else None,
+                "end_timestamp": event.span.end_timestamp.isoformat() if event.span.end_timestamp else None
+            }
+            
+        # Get trace information if available
+        trace_info = None
+        if event.trace:
+            trace_info = {
+                "trace_id": event.trace.trace_id,
+                "start_timestamp": event.trace.start_timestamp.isoformat() if event.trace.start_timestamp else None,
+                "end_timestamp": event.trace.end_timestamp.isoformat() if event.trace.end_timestamp else None
+            }
+            
+        # Get session information if available
+        session_info = None
+        if event.session:
+            session_info = {
+                "session_id": event.session.session_id,
+                "start_timestamp": event.session.start_timestamp.isoformat() if event.session.start_timestamp else None,
+                "end_timestamp": event.session.end_timestamp.isoformat() if event.session.end_timestamp else None
+            }
+            
+        # Construct response
+        response = {
+            "alert": {
+                "id": alert.id,
+                "alert_type": alert.alert_type,
+                "severity": alert.severity,
+                "description": alert.description,
+                "timestamp": alert.timestamp.isoformat(),
+                "status": alert.status,
+                "detection_source": alert.detection_source,
+                "confidence_score": alert.confidence_score,
+                "affected_component": alert.affected_component,
+                "detection_rule_id": alert.detection_rule_id,
+                "raw_attributes": alert.raw_attributes
+            },
+            "event": {
+                "id": event.id,
+                "name": event.name,
+                "timestamp": event.timestamp.isoformat(),
+                "type": event.event_type,
+                "level": event.level,
+                "agent_id": event.agent_id
+            },
+            "triggering_events": triggering_events,
+            "related_events": related_events,
+            "llm_interactions": llm_interactions,
+            "tool_interactions": tool_interactions,
+            "framework_events": framework_events,
+            "span": span_info,
+            "trace": trace_info,
+            "session": session_info
+        }
+        
+        return response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting security alert details: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving security alert details: {str(e)}"
         ) 

@@ -42,9 +42,24 @@ Endpoints for retrieving aggregated metrics and analytics:
 - `GET /v1/metrics/error/count` - Get error count metrics
 - `GET /v1/metrics/session/count` - Get session count metrics
 - `GET /v1/metrics/tool_interactions` - Get tool interactions metrics
-- And more...
 
 See [Metrics Endpoints Guide](./metrics-endpoints-guide.md) for detailed documentation.
+
+### Security API
+
+Endpoints for retrieving security-related information:
+
+- `GET /v1/security/alerts` - Get security alerts with filtering options
+- `GET /v1/security/alerts/count` - Get security alerts count
+- `GET /v1/security/alerts/timeseries` - Get security alerts time series data
+
+These endpoints provide comprehensive security monitoring capabilities, including:
+- Alert filtering by severity, type, and agent
+- Time-based alert analysis
+- Alert count and trend analysis
+- Detailed alert information
+
+See [Security Endpoints Guide](./security-endpoints-guide.md) for detailed documentation.
 
 ### Agent API
 

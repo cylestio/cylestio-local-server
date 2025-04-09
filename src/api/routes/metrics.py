@@ -6,6 +6,7 @@ import os
 
 from fastapi import APIRouter, Depends, Query, HTTPException, status, Path
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from src.database.session import get_db
 from src.api.schemas.metrics import (
@@ -22,6 +23,7 @@ from src.analysis.metrics.tool_metrics import ToolMetrics
 from src.analysis.metrics.llm_analytics import LLMAnalytics
 from src.utils.logging import get_logger
 from src.analysis.utils import parse_time_range
+from src.analysis.utils import sql_time_bucket
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -873,163 +875,6 @@ async def get_performance_metrics(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving performance metrics: {str(e)}"
-        )
-
-# Security and Alert metrics endpoints
-
-@router.get(
-    "/metrics/alerts",
-    response_model=MetricResponse,
-    summary="Get aggregated security alert metrics"
-)
-async def get_alert_metrics(
-    from_time: Optional[datetime] = Query(None, description="Start time (ISO format)"),
-    to_time: Optional[datetime] = Query(None, description="End time (ISO format)"),
-    time_range: Optional[str] = Query("30d", description="Predefined time range (1h, 1d, 7d, 30d)"),
-    interval: Optional[str] = Query("1d", description="Aggregation interval (1m, 1h, 1d, 7d)"),
-    severity: Optional[str] = Query(None, description="Filter by alert severity (low, medium, high)"),
-    alert_type: Optional[str] = Query(None, description="Filter by alert type"),
-    agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
-    db: Session = Depends(get_db)
-):
-    """
-    Get aggregated security alert metrics with filtering options.
-    
-    This endpoint provides data on security alerts across all agents,
-    with trend information and filtering by severity, type, or agent.
-    
-    Returns:
-        MetricResponse: Alert metrics data
-    """
-    logger.info("Querying security alert metrics")
-    
-    # For now, use error_count as proxy for alerts with dimensions
-    # This will be replaced with actual alert metrics in the future
-    dimension_list = ["error.type"]
-    
-    # Validate time_range if provided
-    if time_range and time_range not in ["1h", "1d", "7d", "30d"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid time_range value: {time_range}. Valid values are: 1h, 1d, 7d, 30d"
-        )
-    
-    # Create query object
-    query = MetricQuery(
-        metric="error_count",
-        agent_id=agent_id,
-        from_time=from_time,
-        to_time=to_time,
-        time_range=time_range,
-        interval=interval,
-        dimensions=dimension_list
-    )
-    
-    try:
-        # Get metric data
-        metric_data = get_metric(query, db)
-        
-        # Adjust the metric name for clarity in response
-        metric_data.metric = "security_alert_metrics"
-        
-        # Filter data points based on severity or alert_type if provided
-        if severity or alert_type:
-            filtered_data = []
-            for point in metric_data.data:
-                include = True
-                
-                # Basic mapping of error types to severity levels (to be improved)
-                if severity and "error.type" in point.dimensions:
-                    error_severity = {
-                        "authentication": "high",
-                        "authorization": "high",
-                        "validation": "medium",
-                        "resource": "medium",
-                        "timeout": "low",
-                        "network": "medium"
-                    }.get(point.dimensions["error.type"].lower(), "low")
-                    
-                    if error_severity != severity.lower():
-                        include = False
-                
-                # Filter by alert_type (currently mapped to error.type)
-                if alert_type and "error.type" in point.dimensions:
-                    if point.dimensions["error.type"].lower() != alert_type.lower():
-                        include = False
-                
-                if include:
-                    filtered_data.append(point)
-            
-            metric_data.data = filtered_data
-        
-        return metric_data
-        
-    except Exception as e:
-        logger.error(f"Error getting alert metrics: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving alert metrics: {str(e)}"
-        )
-
-@router.get(
-    "/metrics/security",
-    response_model=MetricResponse,
-    summary="Get security posture metrics"
-)
-async def get_security_metrics(
-    from_time: Optional[datetime] = Query(None, description="Start time (ISO format)"),
-    to_time: Optional[datetime] = Query(None, description="End time (ISO format)"),
-    time_range: Optional[str] = Query("30d", description="Predefined time range (1h, 1d, 7d, 30d)"),
-    interval: Optional[str] = Query("1d", description="Aggregation interval (1m, 1h, 1d, 7d)"),
-    agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
-    db: Session = Depends(get_db)
-):
-    """
-    Get security posture metrics including suspicious activity rates.
-    
-    This endpoint provides data on security posture and anomaly detection
-    across all agents, with optional filtering by agent.
-    
-    Returns:
-        MetricResponse: Security posture metrics data
-    """
-    logger.info("Querying security posture metrics")
-    
-    # For now, use error_count as proxy for security metrics
-    # This will be replaced with actual security metrics in the future
-    
-    # Validate time_range if provided
-    if time_range and time_range not in ["1h", "1d", "7d", "30d"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid time_range value: {time_range}. Valid values are: 1h, 1d, 7d, 30d"
-        )
-    
-    # Create query object
-    query = MetricQuery(
-        metric="error_count",
-        agent_id=agent_id,
-        from_time=from_time,
-        to_time=to_time,
-        time_range=time_range,
-        interval=interval,
-        dimensions=["error.type"]
-    )
-    
-    try:
-        # Get metric data
-        metric_data = get_metric(query, db)
-        
-        # Adjust the metric name for clarity in response
-        metric_data.metric = "security_posture_metrics"
-        
-        return metric_data
-        
-    except Exception as e:
-        logger.error(f"Error getting security posture metrics: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving security posture metrics: {str(e)}"
         )
 
 # Session and Usage Analytics endpoints

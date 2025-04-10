@@ -15,6 +15,7 @@ from src.api.schemas.telemetry import (
 )
 from src.processing.simple_processor import SimpleProcessor
 from src.models.event import Event
+from src.services.security_event_processor import process_security_event, verify_security_event
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -30,6 +31,19 @@ def process_event(event_data: Dict[str, Any], db: Session) -> Event:
     Returns:
         Event: The processed event
     """
+    # Check if this is a security event first
+    event_name = event_data.get("name", "")
+    if event_name.startswith("security.content"):
+        # Verify this is a valid security event
+        is_valid, error_message = verify_security_event(event_data)
+        if not is_valid:
+            raise ValueError(f"Invalid security event: {error_message}")
+        
+        # Process as security event
+        event, security_alert = process_security_event(db, event_data)
+        return event
+    
+    # For non-security events, use SimpleProcessor
     # Create a processor - session factory that returns a list containing the session
     # We create it as a function that returns an iterator to match SimpleProcessor's expectations
     def session_factory():
@@ -79,8 +93,22 @@ async def create_telemetry_event(
         # Convert Pydantic model to dict for processing
         event_dict = event.dict()
         
-        # Process the event
-        processed_event = process_event(event_dict, db)
+        # Begin transaction
+        processed_event = None
+        
+        try:
+            # Process the event
+            processed_event = process_event(event_dict, db)
+            
+            # Commit the transaction if successful
+            db.commit()
+            logger.info(f"Successfully processed event: {event.name}, id: {processed_event.id}")
+            
+        except Exception as process_error:
+            # Rollback on error
+            db.rollback()
+            logger.error(f"Error during event processing, rolling back: {str(process_error)}", exc_info=True)
+            raise process_error
         
         # Return response
         return TelemetryEventResponse(
@@ -122,43 +150,68 @@ async def create_telemetry_events_batch(
     """
     logger.info(f"Processing telemetry batch with {len(batch.events)} events")
     
-    try:
-        processed = 0
-        failed = 0
-        details = []
-        
-        for idx, event in enumerate(batch.events):
+    processed = 0
+    failed = 0
+    details = []
+    processed_ids = []
+    
+    for idx, event in enumerate(batch.events):
+        # Create a new transaction for each event
+        try:
+            # Convert Pydantic model to dict for processing
+            event_dict = event.dict()
+            
+            # Process the event with error handling
             try:
-                # Convert Pydantic model to dict for processing
-                event_dict = event.dict()
+                # Check if this is a security event
+                event_name = event_dict.get("name", "")
+                if event_name.startswith("security.content"):
+                    # Verify this is a valid security event
+                    is_valid, error_message = verify_security_event(event_dict)
+                    if not is_valid:
+                        raise ValueError(f"Invalid security event: {error_message}")
+                    
+                    # Process as security event
+                    processed_event, security_alert = process_security_event(db, event_dict)
+                else:
+                    # Process using SimpleProcessor
+                    processed_event = process_event(event_dict, db)
                 
-                # Process the event
-                processed_event = process_event(event_dict, db)
+                # Commit this event's transaction
+                db.commit()
                 processed += 1
+                processed_ids.append(str(processed_event.id))
+                logger.debug(f"Successfully processed event {idx}: {event.name}")
                 
-            except Exception as e:
-                logger.error(f"Error processing event {idx} in batch: {str(e)}")
+            except Exception as event_error:
+                # Rollback this event's transaction on error
+                db.rollback()
+                logger.error(f"Error processing event {idx} in batch: {str(event_error)}", exc_info=True)
                 failed += 1
                 details.append({
                     "index": idx,
-                    "error": str(e),
+                    "error": str(event_error),
                     "event_name": event.name
                 })
-        
-        # Return batch processing results
-        return TelemetryEventBatchResponse(
-            success=failed == 0,
-            total=len(batch.events),
-            processed=processed,
-            failed=failed,
-            details=details if failed > 0 else None
-        )
-    except Exception as e:
-        logger.error(f"Error processing telemetry batch: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"success": False, "error": "Internal server error processing telemetry batch"}
-        )
+                
+        except Exception as e:
+            logger.error(f"Unexpected error processing event {idx} in batch: {str(e)}", exc_info=True)
+            failed += 1
+            details.append({
+                "index": idx,
+                "error": "Unexpected processing error",
+                "event_name": event.name if hasattr(event, 'name') else "unknown"
+            })
+    
+    # Return batch processing results
+    return TelemetryEventBatchResponse(
+        success=failed == 0,
+        total=len(batch.events),
+        processed=processed,
+        failed=failed,
+        processed_ids=processed_ids,
+        details=details if failed > 0 else None
+    )
 
 @router.get(
     "/telemetry/events", 

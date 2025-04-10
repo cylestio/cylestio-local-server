@@ -61,7 +61,7 @@ class Event(Base):
     security_alert = relationship("SecurityAlert", back_populates="event", uselist=False)
     framework_event = relationship("FrameworkEvent", back_populates="event", uselist=False)
     
-    # Security alert relationships
+    # Many-to-many relationship to connect events that trigger security alerts
     triggered_alerts = relationship("SecurityAlertTrigger", back_populates="triggering_event")
     
     # Add indexes for common queries

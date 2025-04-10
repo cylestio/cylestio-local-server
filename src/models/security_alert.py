@@ -2,7 +2,7 @@
 Security Alert model and related functionality.
 
 This module defines the SecurityAlert model for storing security-related events
-and the SecurityAlertTrigger model for connecting events with the alerts they triggered.
+in the OpenTelemetry-compliant format with additional security metrics.
 """
 import json
 from datetime import datetime
@@ -16,42 +16,54 @@ from src.models.base import Base
 
 class SecurityAlert(Base):
     """
-    Security Alert model for storing security-related events.
+    Security Alert model for storing security-related events in OpenTelemetry format.
     
-    This model captures information about security events detected by the monitoring system,
-    including alert type, severity, description, and metadata.
+    This model captures comprehensive information about security events detected by
+    the monitoring system to enable detailed analysis and investigation.
     """
     __tablename__ = "security_alerts"
     
+    # Core identification fields
     id = Column(Integer, primary_key=True, autoincrement=True)
     event_id = Column(Integer, ForeignKey("events.id"), nullable=False, unique=True, index=True)
     
-    alert_type = Column(String, nullable=False, index=True)  # 'prompt_injection', 'data_leak', etc.
-    severity = Column(String, nullable=False, index=True)  # 'low', 'medium', 'high', 'critical'
+    # OpenTelemetry core fields
+    schema_version = Column(String, nullable=False)
+    timestamp = Column(DateTime, nullable=False, index=True, default=datetime.utcnow)
+    trace_id = Column(String, index=True)
+    span_id = Column(String, index=True)
+    parent_span_id = Column(String, nullable=True)
+    event_name = Column(String, index=True)  # Format: security.content.<alert_level>
+    log_level = Column(String, index=True)   # INFO, WARNING, SECURITY_ALERT, CRITICAL
+    
+    # Security-specific attributes
+    alert_level = Column(String, nullable=False, index=True)  # none, suspicious, dangerous, critical
+    category = Column(String, nullable=False, index=True)     # sensitive_data, prompt_injection, etc.
+    severity = Column(String, nullable=False, index=True)     # low, medium, high, critical
     description = Column(Text, nullable=False)
-    timestamp = Column(DateTime, nullable=False, default=datetime.utcnow)
+    
+    # Additional security context
+    llm_vendor = Column(String, index=True)  # openai, anthropic, etc.
+    content_sample = Column(Text)            # Masked sample of content
+    detection_time = Column(DateTime, index=True)
+    keywords = Column(JSON)                  # List of detected patterns with masked values
+    
+    # Status tracking fields (kept from original model)
     status = Column(String, index=True, default="OPEN")  # 'OPEN', 'INVESTIGATING', 'RESOLVED', 'FALSE_POSITIVE'
     resolved_at = Column(DateTime)
     resolution_notes = Column(Text)
     
-    context = Column(Text)  # JSON field for context information
-    
-    # Extracted attribute fields for better querying
-    detection_source = Column(String, index=True)
-    confidence_score = Column(Float)
-    risk_level = Column(String, index=True)
-    affected_component = Column(String, index=True)
-    detection_rule_id = Column(String, index=True)
-    
-    # Raw attributes JSON storage for complete data
-    raw_attributes = Column(JSON)
+    # Complete data storage
+    raw_attributes = Column(JSON)  # Store full attributes for future analysis
     
     # Relationships
     event = relationship("Event", back_populates="security_alert")
+    
+    # Many-to-many relationship to connect events that triggered this alert
     triggered_by = relationship("SecurityAlertTrigger", back_populates="alert")
     
     def __repr__(self) -> str:
-        return f"<SecurityAlert {self.id} ({self.alert_type}, {self.severity})>"
+        return f"<SecurityAlert {self.id} ({self.category}, {self.severity}, {self.alert_level})>"
     
     @classmethod
     def from_event(cls, db_session, event, telemetry_data=None) -> "SecurityAlert":
@@ -66,108 +78,136 @@ class SecurityAlert(Base):
         Returns:
             SecurityAlert: The created security alert
         """
-        # If telemetry_data is provided, use the method with telemetry support
-        if telemetry_data:
-            return cls.from_event_with_telemetry(db_session, event, telemetry_data)
+        # Always use new telemetry format
+        if not telemetry_data and event.raw_data:
+            telemetry_data = event.raw_data
             
-        # Original implementation for backward compatibility
-        if not event.data:
-            raise ValueError("Event data is required to create a security alert")
-            
-        try:
-            event_data = json.loads(event.data)
-        except json.JSONDecodeError:
-            raise ValueError("Event data must be valid JSON")
-            
-        payload = event_data.get("payload", {})
+        if not telemetry_data:
+            raise ValueError("Telemetry data is required to create a security alert")
         
-        # Use payload values directly instead of deriving from event name
-        alert_type = payload.get("alert_type", "unknown")
-        alert_severity = payload.get("severity", "unknown")
-            
-        # Extract attributes
-        attributes = payload.get("attributes", {})
+        attributes = telemetry_data.get('attributes', {})
         
-        # Create security alert
+        # Extract timestamps
+        detection_time = None
+        if attributes.get("security.detection_time"):
+            detection_time = attributes.get("security.detection_time")
+            if isinstance(detection_time, str):
+                detection_time = datetime.fromisoformat(detection_time.replace('Z', '+00:00'))
+        
+        event_timestamp = telemetry_data.get('timestamp') or event.timestamp or datetime.utcnow()
+        if isinstance(event_timestamp, str):
+            event_timestamp = datetime.fromisoformat(event_timestamp.replace('Z', '+00:00'))
+        
+        # Map OpenTelemetry fields to model fields
         security_alert = cls(
             event_id=event.id,
-            alert_type=alert_type,
-            severity=alert_severity,
-            description=payload.get("description", "No description provided"),
-            context=json.dumps(payload.get("context")) if payload.get("context") else None,
-            status="OPEN",  # Set default status to OPEN
-            raw_attributes=attributes,  # Store raw attributes
             
-            # Extract known attributes to dedicated columns
-            detection_source=attributes.get("detection_source", payload.get("detection_source")),
-            confidence_score=attributes.get("confidence_score", payload.get("confidence_score")),
-            risk_level=attributes.get("risk_level", payload.get("risk_level")),
-            affected_component=attributes.get("affected_component", payload.get("affected_component")),
-            detection_rule_id=attributes.get("detection_rule_id", payload.get("detection_rule_id"))
+            # OpenTelemetry core fields
+            schema_version=telemetry_data.get('schema_version', '1.0'),
+            timestamp=event_timestamp,
+            trace_id=telemetry_data.get('trace_id'),
+            span_id=telemetry_data.get('span_id'),
+            parent_span_id=telemetry_data.get('parent_span_id'),
+            event_name=telemetry_data.get('name'),
+            log_level=telemetry_data.get('level'),
+            
+            # Security-specific attributes
+            alert_level=attributes.get('security.alert_level', 'none'),
+            category=attributes.get('security.category', 'unknown'),
+            severity=attributes.get('security.severity', 'low'),
+            description=attributes.get('security.description', 'No description provided'),
+            
+            # Additional security context
+            llm_vendor=attributes.get('llm.vendor'),
+            content_sample=attributes.get('security.content_sample'),
+            detection_time=detection_time or event_timestamp,
+            keywords=attributes.get('security.keywords'),
+            
+            # Status tracking (defaults)
+            status="OPEN",
+            
+            # Complete data storage
+            raw_attributes=attributes
         )
         
         db_session.add(security_alert)
-        
-        # Create SecurityAlertTrigger records if triggering events are specified
-        if "triggering_events" in payload and isinstance(payload["triggering_events"], list):
-            for triggering_event_id in payload["triggering_events"]:
-                trigger = SecurityAlertTrigger(
-                    alert_id=security_alert.id,
-                    triggering_event_id=triggering_event_id
-                )
-                db_session.add(trigger)
-        
         return security_alert
     
     @classmethod
-    def from_event_with_telemetry(cls, db_session, event, telemetry_data: Dict[str, Any]) -> "SecurityAlert":
+    def from_telemetry_event(cls, db_session, event, telemetry_data: Dict[str, Any]) -> "SecurityAlert":
         """
-        Create a SecurityAlert from an event with telemetry data.
+        Create a SecurityAlert from an OpenTelemetry security event.
         
         Args:
             db_session: Database session
             event: The parent Event object
-            telemetry_data: Telemetry data dictionary
+            telemetry_data: OpenTelemetry event data
             
         Returns:
             SecurityAlert: The created security alert
         """
-        attributes = telemetry_data.get('attributes', {})
+        # Extract core OpenTelemetry fields
+        schema_version = telemetry_data.get("schema_version", "1.0")
+        trace_id = telemetry_data.get("trace_id")
+        span_id = telemetry_data.get("span_id")
+        parent_span_id = telemetry_data.get("parent_span_id")
+        event_name = telemetry_data.get("name")
+        log_level = telemetry_data.get("level", "INFO")
         
         # Extract timestamp
-        timestamp = attributes.get("timestamp") or event.timestamp or datetime.utcnow()
-        if isinstance(timestamp, str):
-            timestamp = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+        timestamp_str = telemetry_data.get("timestamp")
+        timestamp = None
+        if timestamp_str:
+            try:
+                timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+            except (ValueError, TypeError):
+                timestamp = datetime.utcnow()
+        else:
+            timestamp = event.timestamp or datetime.utcnow()
+        
+        # Extract security-specific attributes
+        attributes = telemetry_data.get('attributes', {})
+        
+        alert_level = attributes.get("security.alert_level", "none")
+        category = attributes.get("security.category", "unknown")
+        severity = attributes.get("security.severity", "low")
+        description = attributes.get("security.description", "No description provided")
+        llm_vendor = attributes.get("llm.vendor")
+        content_sample = attributes.get("security.content_sample")
+        detection_time_str = attributes.get("security.detection_time")
+        keywords = attributes.get("security.keywords", [])
+        
+        # Parse detection time
+        detection_time = None
+        if detection_time_str:
+            try:
+                detection_time = datetime.fromisoformat(detection_time_str.replace('Z', '+00:00'))
+            except (ValueError, TypeError):
+                detection_time = timestamp
         
         # Create security alert
         security_alert = cls(
             event_id=event.id,
-            alert_type=attributes.get("alert_type", "unknown"),
-            severity=attributes.get("severity", "MEDIUM"),
-            description=attributes.get("description", "No description provided"),
+            schema_version=schema_version,
             timestamp=timestamp,
-            status="OPEN",
-            context=json.dumps(attributes.get("context")) if attributes.get("context") else None,
-            raw_attributes=attributes,  # Store raw attributes
-            
-            # Extract known attributes to dedicated columns
-            detection_source=attributes.get("detection_source") or attributes.get("security.detection_source"),
-            confidence_score=attributes.get("confidence_score") or attributes.get("security.confidence_score"),
-            risk_level=attributes.get("risk_level") or attributes.get("security.risk_level"),
-            affected_component=attributes.get("affected_component") or attributes.get("security.affected_component"),
-            detection_rule_id=attributes.get("detection_rule_id") or attributes.get("security.detection_rule_id")
+            trace_id=trace_id,
+            span_id=span_id,
+            parent_span_id=parent_span_id,
+            event_name=event_name,
+            log_level=log_level,
+            alert_level=alert_level,
+            category=category,
+            severity=severity,
+            description=description,
+            llm_vendor=llm_vendor,
+            content_sample=content_sample,
+            detection_time=detection_time,
+            keywords=keywords,
+            raw_attributes=attributes
         )
         
         db_session.add(security_alert)
-        
-        # Create SecurityAlertTrigger records if triggering events are specified
-        if "triggering_events" in attributes and isinstance(attributes["triggering_events"], list):
-            for triggering_event_id in attributes["triggering_events"]:
-                trigger = SecurityAlertTrigger(
-                    alert_id=security_alert.id,
-                    triggering_event_id=triggering_event_id
-                )
-                db_session.add(trigger)
+        db_session.flush()  # Ensure the ID is generated
         
         return security_alert
     
@@ -183,20 +223,17 @@ class SecurityAlert(Base):
         self.resolved_at = resolved_at or datetime.utcnow()
         self.resolution_notes = resolution_notes
     
-    def get_context_dict(self) -> Optional[Dict[str, Any]]:
+    def mark_as_false_positive(self, notes: str, resolved_at: Optional[datetime] = None) -> None:
         """
-        Get the context as a dictionary.
+        Mark the security alert as a false positive.
         
-        Returns:
-            Dict or None: The context as a dictionary or None if not available
+        Args:
+            notes: Notes about why this is a false positive
+            resolved_at: When the alert was resolved (default: current time)
         """
-        if not self.context:
-            return None
-            
-        try:
-            return json.loads(self.context)
-        except json.JSONDecodeError:
-            return None
+        self.status = "FALSE_POSITIVE"
+        self.resolved_at = resolved_at or datetime.utcnow()
+        self.resolution_notes = notes
     
     def get_attribute(self, key: str, default: Any = None) -> Any:
         """
@@ -214,25 +251,38 @@ class SecurityAlert(Base):
             
         return self.raw_attributes.get(key, default)
     
-    def get_triggering_events(self, db_session) -> List["Event"]:
+    @classmethod
+    def find_by_trace(cls, db_session, trace_id: str) -> List["SecurityAlert"]:
         """
-        Get all events that triggered this alert.
+        Find all security alerts for a specific trace.
         
         Args:
             db_session: Database session
+            trace_id: The trace ID to search for
             
         Returns:
-            List[Event]: List of events that triggered this alert
+            List[SecurityAlert]: List of security alerts for the trace
         """
-        from src.models.event import Event
+        return db_session.query(cls).filter(cls.trace_id == trace_id).all()
+    
+    @classmethod
+    def find_related_by_span(cls, db_session, span_id: str) -> List["SecurityAlert"]:
+        """
+        Find security alerts related to a specific span.
         
-        triggers = db_session.query(SecurityAlertTrigger).filter(
-            SecurityAlertTrigger.alert_id == self.id
+        This includes both alerts with the exact span_id and those where this span
+        is the parent_span_id.
+        
+        Args:
+            db_session: Database session
+            span_id: The span ID to search for
+            
+        Returns:
+            List[SecurityAlert]: List of related security alerts
+        """
+        return db_session.query(cls).filter(
+            (cls.span_id == span_id) | (cls.parent_span_id == span_id)
         ).all()
-        
-        event_ids = [trigger.triggering_event_id for trigger in triggers]
-        
-        return db_session.query(Event).filter(Event.id.in_(event_ids)).all()
     
     @classmethod
     def open_alerts_for_agent(cls, db_session, agent_id: str) -> List["SecurityAlert"]:
@@ -248,13 +298,64 @@ class SecurityAlert(Base):
         """
         from src.models.event import Event
         
-        # Find all open alerts for events belonging to this agent
-        return db_session.query(cls).join(
-            Event, cls.event_id == Event.id
-        ).filter(
+        return db_session.query(cls).join(Event).filter(
             Event.agent_id == agent_id,
             cls.status == "OPEN"
+        ).order_by(cls.timestamp.desc()).all()
+    
+    @classmethod
+    def alerts_by_category(cls, db_session, timeframe_days: int = 7) -> Dict[str, int]:
+        """
+        Get counts of alerts by category within a specific timeframe.
+        
+        Args:
+            db_session: Database session
+            timeframe_days: Number of days to look back
+            
+        Returns:
+            Dict[str, int]: Dictionary mapping categories to alert counts
+        """
+        from sqlalchemy import func
+        from datetime import timedelta
+        
+        cutoff_date = datetime.utcnow() - timedelta(days=timeframe_days)
+        
+        result = db_session.query(
+            cls.category, func.count(cls.id)
+        ).filter(
+            cls.timestamp >= cutoff_date
+        ).group_by(
+            cls.category
         ).all()
+        
+        return {category: count for category, count in result}
+    
+    @classmethod
+    def alerts_by_severity(cls, db_session, timeframe_days: int = 7) -> Dict[str, int]:
+        """
+        Get counts of alerts by severity within a specific timeframe.
+        
+        Args:
+            db_session: Database session
+            timeframe_days: Number of days to look back
+            
+        Returns:
+            Dict[str, int]: Dictionary mapping severity levels to alert counts
+        """
+        from sqlalchemy import func
+        from datetime import timedelta
+        
+        cutoff_date = datetime.utcnow() - timedelta(days=timeframe_days)
+        
+        result = db_session.query(
+            cls.severity, func.count(cls.id)
+        ).filter(
+            cls.timestamp >= cutoff_date
+        ).group_by(
+            cls.severity
+        ).all()
+        
+        return {severity: count for severity, count in result}
 
 
 class SecurityAlertTrigger(Base):

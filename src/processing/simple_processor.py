@@ -437,7 +437,20 @@ class SimpleProcessor:
                 logger.error(f"Exception creating LLM interaction: {str(e)}")
                 logger.exception(e)
         elif event_type == "security":
-            specialized_event = SecurityAlert.from_event(db_session, event, event_data)
+            # Use the new telemetry method for processing security events
+            try:
+                from src.services.security_event_processor import process_security_event
+                # The event has already been created, so we just need to create the security alert
+                specialized_event = SecurityAlert.from_telemetry_event(db_session, event, event_data)
+                if specialized_event:
+                    logger.debug(f"Created Security Alert with ID {specialized_event.id}")
+                else:
+                    logger.warning(f"Failed to create Security Alert for event {event.id}")
+            except Exception as e:
+                logger.error(f"Exception creating Security Alert: {str(e)}")
+                logger.exception(e)
+                # Fall back to the old method if the new one fails
+                specialized_event = SecurityAlert.from_event(db_session, event, event_data)
         elif event_type == "framework":
             specialized_event = FrameworkEvent.from_event(db_session, event, event_data)
         elif event_type == "tool":

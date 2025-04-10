@@ -12,7 +12,7 @@ from src.database.session import get_db
 from src.api.schemas.metrics import (
     MetricResponse, DashboardResponse, ToolInteractionListResponse,
     LLMMetricsFilter, LLMMetricsBreakdownResponse, LLMMetricsBreakdown,
-    LLMMetricsBreakdownItem, TimeGranularity
+    LLMMetricsBreakdownItem, TimeGranularity, TimeRange
 )
 from src.analysis.interface import (
     MetricQuery, TimeRangeParams, TimeSeriesParams, TimeResolution, MetricParams,
@@ -188,7 +188,7 @@ async def get_llm_token_usage(
             )
         
         # Calculate time range
-        to_time = datetime.utcnow()
+        to_time = datetime.utcnow() + timedelta(hours=2)
         if time_range == "1h":
             from_time = to_time - timedelta(hours=1)
         elif time_range == "1d":
@@ -788,19 +788,36 @@ async def get_system_token_metrics(
     
     # Format the response in the requested structure
     models = []
+    total_input = 0
+    total_output = 0
+    
     for item in model_usage.items:
+        # Ensure total_tokens is correctly calculated if it's zero
+        model_total_tokens = item["total_tokens"]
+        if model_total_tokens == 0 and (item["input_tokens"] > 0 or item["output_tokens"] > 0):
+            model_total_tokens = item["input_tokens"] + item["output_tokens"]
+            
         models.append({
             "name": item["model"],
             "input_tokens": item["input_tokens"],
             "output_tokens": item["output_tokens"],
-            "total_tokens": item["total_tokens"]
+            "total_tokens": model_total_tokens
         })
+        
+        # Accumulate totals from the model breakdown
+        total_input += item["input_tokens"]
+        total_output += item["output_tokens"]
+    
+    # Use the summary values if they're non-zero, otherwise use the calculated totals
+    input_tokens = summary["total_input_tokens"] if summary["total_input_tokens"] > 0 else total_input
+    output_tokens = summary["total_output_tokens"] if summary["total_output_tokens"] > 0 else total_output
+    total_tokens = summary["total_tokens"] if summary["total_tokens"] > 0 else (input_tokens + output_tokens)
     
     # Create the response object
     response = {
-        "input_tokens": summary["total_input_tokens"],
-        "output_tokens": summary["total_output_tokens"],
-        "total_tokens": summary["total_tokens"],
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": total_tokens,
         "models": models
     }
     

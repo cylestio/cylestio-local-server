@@ -108,7 +108,7 @@ async def list_agents(
                 "has_prev": page > 1
             },
             "meta": {
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": (datetime.utcnow() + timedelta(hours=2)).isoformat()
             }
         }
         
@@ -307,7 +307,7 @@ def get_agent_llm_usage(
         # Add metadata to the response if not present
         if "meta" not in llm_usage_data:
             llm_usage_data["meta"] = {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": (datetime.utcnow() + timedelta(hours=2)).isoformat(),
                 "time_period": f"Last {time_range}" if not (from_time and to_time) else "Custom range"
             }
         
@@ -412,7 +412,7 @@ async def get_agent_llm_requests(
                 "has_prev": page > 1
             },
             "meta": {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": (datetime.utcnow() + timedelta(hours=2)).isoformat(),
                 "time_period": f"Last {time_range}" if not (from_time and to_time) else f"Custom range",
                 "filters_applied": filters
             }
@@ -497,7 +497,7 @@ async def get_agent_token_usage(
         
         # Add metadata to the response
         token_usage_data["meta"] = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": (datetime.utcnow() + timedelta(hours=2)).isoformat(),
             "time_period": f"Last {time_range}" if not (from_time and to_time) else "Custom range",
             "group_by": group_by
         }
@@ -574,7 +574,7 @@ async def get_agent_tool_usage(
         # Add metadata to the response if not present
         if "meta" not in tool_usage_data:
             tool_usage_data["meta"] = {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": (datetime.utcnow() + timedelta(hours=2)).isoformat(),
                 "time_period": f"Last {time_range}" if not (from_time and to_time) else "Custom range"
             }
         
@@ -679,7 +679,7 @@ async def get_agent_tool_executions_route(
                 "has_prev": page > 1
             },
             "meta": {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": (datetime.utcnow() + timedelta(hours=2)).isoformat(),
                 "time_period": f"Last {time_range}" if not (from_time and to_time) else "Custom range",
                 "filters_applied": filters
             }
@@ -775,7 +775,7 @@ async def get_agent_sessions_route(
                 "pages": (total_count + page_size - 1) // page_size
             },
             "meta": {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": (datetime.utcnow() + timedelta(hours=2)).isoformat(),
                 "time_period": f"Last {time_range}" if not (from_time and to_time) else "Custom range"
             }
         }
@@ -873,7 +873,7 @@ async def get_agent_traces_route(
                 "pages": (total_count + page_size - 1) // page_size
             },
             "meta": {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": (datetime.utcnow() + timedelta(hours=2)).isoformat(),
                 "time_period": f"Last {time_range}" if not (from_time and to_time) else "Custom range"
             }
         }
@@ -968,7 +968,7 @@ async def get_agent_alerts_route(
                 "pages": (total_count + page_size - 1) // page_size
             },
             "meta": {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": (datetime.utcnow() + timedelta(hours=2)).isoformat(),
                 "time_period": f"Last {time_range}" if not (from_time and to_time) else "Custom range"
             }
         }

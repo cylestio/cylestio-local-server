@@ -57,12 +57,15 @@ class LLMAnalytics(AnalysisInterface):
         """
         print("DEBUG: Entering get_metrics method")
         
-        # Set default time range if not provided
-        if not filters.from_time or not filters.to_time:
-            filters.to_time = datetime.utcnow()
-            filters.from_time = filters.to_time - timedelta(days=30)
-            print(f"DEBUG: Set default time range: {filters.from_time} to {filters.to_time}")
-            
+        # Fill in default time range if not provided
+        if filters.from_time is None or filters.to_time is None:
+            if filters.from_time is None:
+                # Default to last 30 days if not specified
+                filters.from_time = filters.to_time - timedelta(days=30) if filters.to_time else datetime.utcnow() - timedelta(days=30) + timedelta(hours=2)
+                
+            if filters.to_time is None:
+                filters.to_time = datetime.utcnow() + timedelta(hours=2)
+        
         # Get aggregated metrics
         print("DEBUG: About to call _get_aggregated_metrics")
         total_metrics = self._get_aggregated_metrics(filters)

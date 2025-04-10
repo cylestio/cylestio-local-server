@@ -67,7 +67,8 @@ async def get_security_alerts(
             time_start, time_end = from_time, to_time
         else:
             # Otherwise calculate from time_range
-            time_end = datetime.utcnow()
+            # Add 2 hours offset to match Madrid time (UTC+2)
+            time_end = datetime.utcnow() + timedelta(hours=2)
             if time_range == "1h":
                 time_start = time_end - timedelta(hours=1)
             elif time_range == "1d":
@@ -146,56 +147,6 @@ async def get_security_alerts(
 
 
 @router.get(
-    "/alerts/{alert_id}",
-    response_model=Dict[str, Any],
-    summary="Get detailed information about a specific security alert"
-)
-async def get_security_alert_details(
-    alert_id: int = Path(..., description="Security alert ID"),
-    include_related_events: bool = Query(False, description="Include related events by span_id"),
-    db: Session = Depends(get_db)
-):
-    """
-    Get detailed information about a specific security alert.
-    
-    Returns all data for a security alert, with optional inclusion of related events.
-    
-    Returns:
-        Dict[str, Any]: Detailed alert data
-    """
-    logger.info(f"Getting details for security alert {alert_id}")
-    
-    try:
-        # Get the alert
-        alert = db.query(SecurityAlert).filter(SecurityAlert.id == alert_id).first()
-        if not alert:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Security alert with ID {alert_id} not found"
-            )
-        
-        # Format the alert
-        alert_data = format_alert_for_response(alert)
-        
-        # Include related events if requested
-        if include_related_events:
-            related_events = SecurityQueryService.get_related_events(db, alert_id)
-            alert_data["related_events"] = related_events
-        
-        return alert_data
-        
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
-    except Exception as e:
-        logger.error(f"Error getting security alert details: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving security alert details: {str(e)}"
-        )
-
-
-@router.get(
     "/alerts/timeseries",
     response_model=Dict[str, Any],
     summary="Get security alerts time series data"
@@ -228,7 +179,8 @@ async def get_security_alerts_timeseries(
             time_start, time_end = from_time, to_time
         else:
             # Otherwise calculate from time_range
-            time_end = datetime.utcnow()
+            # Add 2 hours offset to match Madrid time (UTC+2)
+            time_end = datetime.utcnow() + timedelta(hours=2)
             if time_range == "1h":
                 time_start = time_end - timedelta(hours=1)
             elif time_range == "1d":
@@ -276,7 +228,7 @@ async def get_security_alerts_timeseries(
 
 
 @router.get(
-    "/overview",
+    "/alerts/overview",
     response_model=Dict[str, Any],
     summary="Get security overview for dashboards"
 )
@@ -286,29 +238,196 @@ async def get_security_dashboard_overview(
     db: Session = Depends(get_db)
 ):
     """
-    Get a comprehensive security overview for dashboards.
+    Get security overview for dashboards.
     
-    This endpoint provides aggregated metrics, recent alerts, and trends
-    for building security dashboards.
+    This endpoint provides a comprehensive overview of security metrics for dashboards,
+    including aggregate metrics, time series data, and recent alerts.
     
     Returns:
         Dict[str, Any]: Security overview data
     """
-    logger.info("Getting security overview")
+    logger.info("Getting security dashboard overview")
     
     try:
-        # Get security overview data
-        overview = get_security_overview(
-            db=db,
-            time_range=time_range,
-            agent_id=agent_id
-        )
-        
-        return overview
+        # Adjust time_range to use local time (Madrid, UTC+2)
+        # This is handled inside the get_security_overview function
+        result = get_security_overview(db, time_range, agent_id)
+        return result
         
     except Exception as e:
         logger.error(f"Error getting security overview: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving security overview: {str(e)}"
+        )
+
+
+@router.get(
+    "/alerts/stats",
+    response_model=Dict[str, Any],
+    summary="Get security alerts statistics"
+)
+async def get_security_alerts_stats(
+    from_time: Optional[datetime] = Query(None, description="Start time (ISO format)"),
+    to_time: Optional[datetime] = Query(None, description="End time (ISO format)"),
+    time_range: Optional[str] = Query("30d", description="Predefined time range (1h, 1d, 7d, 30d)"),
+    agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get security alerts statistics including count and breakdown by severity and type.
+    
+    Returns:
+        Dict[str, Any]: Security alerts statistics
+    """
+    logger.info("Querying security alert statistics")
+    
+    # Validate time_range if provided
+    if time_range and time_range not in ["1h", "1d", "7d", "30d"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid time_range value: {time_range}. Valid values are: 1h, 1d, 7d, 30d"
+        )
+    
+    try:
+        # Determine time range based on parameters
+        if from_time and to_time:
+            # Use explicit from/to time if provided
+            time_start, time_end = from_time, to_time
+        else:
+            # Otherwise calculate from time_range
+            # Add 2 hours offset to match Madrid time (UTC+2)
+            if time_range == "1h":
+                time_start = datetime.utcnow() - timedelta(hours=1) + timedelta(hours=2)
+            elif time_range == "1d":
+                time_start = datetime.utcnow() - timedelta(days=1) + timedelta(hours=2)
+            elif time_range == "7d":
+                time_start = datetime.utcnow() - timedelta(days=7) + timedelta(hours=2)
+            else:  # Default to 30d
+                time_start = datetime.utcnow() - timedelta(days=30) + timedelta(hours=2)
+                
+            time_end = datetime.utcnow() + timedelta(hours=2)
+        
+        # Query with SQLAlchemy
+        from src.models.event import Event
+        from sqlalchemy import func
+        
+        # Get total count
+        count_query = db.query(func.count(SecurityAlert.id)).join(
+            Event, SecurityAlert.event_id == Event.id
+        ).filter(
+            SecurityAlert.timestamp >= time_start,
+            SecurityAlert.timestamp <= time_end
+        )
+        
+        if agent_id:
+            count_query = count_query.filter(Event.agent_id == agent_id)
+            
+        total_count = count_query.scalar() or 0
+        
+        # Get severity breakdown
+        severity_query = db.query(
+            SecurityAlert.severity,
+            func.count().label('count')
+        ).join(
+            Event, SecurityAlert.event_id == Event.id
+        ).filter(
+            SecurityAlert.timestamp >= time_start,
+            SecurityAlert.timestamp <= time_end
+        )
+        
+        if agent_id:
+            severity_query = severity_query.filter(Event.agent_id == agent_id)
+            
+        severity_query = severity_query.group_by(SecurityAlert.severity)
+        severity_results = severity_query.all()
+        
+        severity_counts = {result.severity: result.count for result in severity_results}
+        
+        # Get alert type breakdown
+        type_query = db.query(
+            SecurityAlert.category,
+            func.count().label('count')
+        ).join(
+            Event, SecurityAlert.event_id == Event.id
+        ).filter(
+            SecurityAlert.timestamp >= time_start,
+            SecurityAlert.timestamp <= time_end
+        )
+        
+        if agent_id:
+            type_query = type_query.filter(Event.agent_id == agent_id)
+            
+        type_query = type_query.group_by(SecurityAlert.category)
+        type_results = type_query.all()
+        
+        type_counts = {result.category: result.count for result in type_results}
+        
+        # Construct response
+        return {
+            "count": total_count,
+            "by_severity": severity_counts,
+            "by_type": type_counts,
+            "time_range": {
+                "from": time_start.isoformat(),
+                "to": time_end.isoformat(),
+                "description": f"Last {time_range}" if not (from_time and to_time) else "Custom range"
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting security alert statistics: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving security alert statistics: {str(e)}"
+        )
+
+
+@router.get(
+    "/alerts/{alert_id}",
+    response_model=Dict[str, Any],
+    summary="Get detailed information about a specific security alert"
+)
+async def get_security_alert_details(
+    alert_id: int = Path(..., description="Security alert ID", ge=1),
+    include_related_events: bool = Query(False, description="Include related events by span_id"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get detailed information about a specific security alert.
+    
+    Returns all data for a security alert, with optional inclusion of related events.
+    
+    Returns:
+        Dict[str, Any]: Detailed alert data
+    """
+    logger.info(f"Getting details for security alert {alert_id}")
+    
+    try:
+        # Get the alert
+        alert = db.query(SecurityAlert).filter(SecurityAlert.id == alert_id).first()
+        if not alert:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Security alert with ID {alert_id} not found"
+            )
+        
+        # Format the alert
+        alert_data = format_alert_for_response(alert)
+        
+        # Include related events if requested
+        if include_related_events:
+            related_events = SecurityQueryService.get_related_events(db, alert_id)
+            alert_data["related_events"] = related_events
+        
+        return alert_data
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        logger.error(f"Error getting security alert details: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving security alert details: {str(e)}"
         ) 

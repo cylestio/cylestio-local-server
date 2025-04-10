@@ -353,6 +353,10 @@ class TokenMetrics(AnalysisInterface):
                 'interaction_count': result.interaction_count or 0
             }
             
+            # Ensure total_tokens is calculated correctly
+            if item['total_tokens'] == 0 and (item['input_tokens'] > 0 or item['output_tokens'] > 0):
+                item['total_tokens'] = item['input_tokens'] + item['output_tokens']
+            
             # Calculate estimated cost
             estimated_cost = calculate_token_cost(
                 item['input_tokens'], 

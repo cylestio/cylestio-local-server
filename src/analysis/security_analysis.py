@@ -61,7 +61,8 @@ def get_security_overview(
         Security overview data
     """
     # Calculate time range
-    now = datetime.utcnow()
+    # Adding 2 hours to use Madrid time (UTC+2)
+    now = datetime.utcnow() + timedelta(hours=2)
     if time_range == "1h":
         time_start = now - timedelta(hours=1)
     elif time_range == "1d":

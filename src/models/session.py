@@ -4,7 +4,7 @@ Session model and related functionality.
 This module defines the Session model for representing user interaction sessions
 with agents, including session start/end and related telemetry.
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 import uuid
 
@@ -115,7 +115,7 @@ class Session(Base):
             end_timestamp: Optional end timestamp (default: current time)
         """
         if self.end_timestamp is None:
-            self.end_timestamp = end_timestamp or datetime.utcnow()
+            self.end_timestamp = end_timestamp or datetime.utcnow() + timedelta(hours=2)
             db_session.add(self)
     
     @property

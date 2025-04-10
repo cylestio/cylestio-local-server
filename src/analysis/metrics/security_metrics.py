@@ -57,7 +57,7 @@ class SecurityMetrics(AnalysisInterface):
         query = self.db_session.query(
             func.count().label('total_alerts'),
             func.count(func.distinct(Event.agent_id)).label('agents_with_alerts'),
-            func.count(func.distinct(SecurityAlert.alert_type)).label('unique_alert_types')
+            func.count(func.distinct(SecurityAlert.category)).label('unique_alert_types')
         ).join(
             Event, SecurityAlert.event_id == Event.id
         )
@@ -349,7 +349,7 @@ class SecurityMetrics(AnalysisInterface):
             Event.agent_id,
             Event.timestamp,
             SecurityAlert.severity,
-            SecurityAlert.alert_type,
+            SecurityAlert.category,
             LLMInteraction.request_data.label('input')
         ).join(
             SecurityAlert, Event.id == SecurityAlert.event_id
@@ -367,7 +367,7 @@ class SecurityMetrics(AnalysisInterface):
                 'agent_id': Event.agent_id,
                 'timestamp': Event.timestamp,
                 'severity': SecurityAlert.severity,
-                'alert_type': SecurityAlert.alert_type
+                'alert_type': SecurityAlert.category
             }
             
             # Get the column to sort by
@@ -423,7 +423,7 @@ class SecurityMetrics(AnalysisInterface):
                 "agent_id": item.agent_id,
                 "timestamp": item.timestamp,
                 "severity": item.severity,
-                "alert_type": item.alert_type,
+                "alert_type": item.category,
                 "input_text": input_text or "Unknown input"
             })
         

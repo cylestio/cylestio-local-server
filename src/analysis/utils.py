@@ -32,7 +32,8 @@ def parse_time_range(
     
     # Calculate time range if using predefined range
     if time_range:
-        now = datetime.utcnow()
+        # Add 2 hours offset to match Madrid time (UTC+2)
+        now = datetime.utcnow() + timedelta(hours=2)
         
         if time_range == "1h":
             return now - timedelta(hours=1), now
@@ -47,7 +48,8 @@ def parse_time_range(
             return now - timedelta(days=30), now
     
     # Default: last 30 days
-    now = datetime.utcnow()
+    # Add 2 hours offset to match Madrid time (UTC+2)
+    now = datetime.utcnow() + timedelta(hours=2)
     return now - timedelta(days=30), now
 
 
@@ -177,7 +179,8 @@ def _fill_missing_time_points(
     
     # Generate all time points in the range
     start = time_range.start
-    end = time_range.end or datetime.utcnow()
+    # Add 2 hours offset to match Madrid time (UTC+2)
+    end = time_range.end or datetime.utcnow() + timedelta(hours=2)
     
     # Adjust start and end based on resolution
     if resolution.value == 'minute':

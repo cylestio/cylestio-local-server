@@ -307,8 +307,19 @@ class SecurityQueryService:
         # Format the results
         result = []
         for row in query.all():
+            # Make sure we have a valid timestamp that can be serialized
+            if row.bucket:
+                timestamp = row.bucket
+                if isinstance(timestamp, datetime):
+                    timestamp = timestamp.isoformat()
+                elif not isinstance(timestamp, str):
+                    timestamp = str(timestamp)
+            else:
+                # Use current time as fallback
+                timestamp = datetime.utcnow().isoformat()
+                
             result.append({
-                "timestamp": row.bucket.isoformat(),
+                "timestamp": timestamp,
                 "count": row.count
             })
             

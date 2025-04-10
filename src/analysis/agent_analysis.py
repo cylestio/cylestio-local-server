@@ -1482,7 +1482,7 @@ def get_agent_alerts(
     
     # Apply additional filters
     if "type" in filters and filters["type"]:
-        query = query.filter(SecurityAlert.alert_type == filters["type"])
+        query = query.filter(SecurityAlert.category == filters["type"])
         
     if "severity" in filters and filters["severity"]:
         query = query.filter(SecurityAlert.severity == filters["severity"])
@@ -1510,7 +1510,7 @@ def get_agent_alerts(
         items.append({
             "alert_id": str(event.id),
             "timestamp": event.timestamp,
-            "type": alert.alert_type or "unknown",
+            "type": alert.category or "unknown",
             "severity": alert.severity or "medium",
             "description": alert.description or f"Security alert: {event.name}",
             "status": alert.status or "open",

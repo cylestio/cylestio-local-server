@@ -60,25 +60,29 @@ class TimeRangeParams:
     @classmethod
     def last_hour(cls) -> 'TimeRangeParams':
         """Create a time range for the last hour."""
-        now = datetime.utcnow()
+        # Add 2 hours offset to match Madrid time (UTC+2)
+        now = datetime.utcnow() + timedelta(hours=2)
         return cls(start=now - timedelta(hours=1), end=now)
     
     @classmethod
     def last_day(cls) -> 'TimeRangeParams':
         """Create a time range for the last 24 hours."""
-        now = datetime.utcnow()
+        # Add 2 hours offset to match Madrid time (UTC+2)
+        now = datetime.utcnow() + timedelta(hours=2)
         return cls(start=now - timedelta(days=1), end=now)
     
     @classmethod
     def last_week(cls) -> 'TimeRangeParams':
         """Create a time range for the last 7 days."""
-        now = datetime.utcnow()
+        # Add 2 hours offset to match Madrid time (UTC+2)
+        now = datetime.utcnow() + timedelta(hours=2)
         return cls(start=now - timedelta(days=7), end=now)
     
     @classmethod
     def last_month(cls) -> 'TimeRangeParams':
         """Create a time range for the last 30 days."""
-        now = datetime.utcnow()
+        # Add 2 hours offset to match Madrid time (UTC+2)
+        now = datetime.utcnow() + timedelta(hours=2)
         return cls(start=now - timedelta(days=30), end=now)
 
 
@@ -489,7 +493,7 @@ def get_metric(query: MetricQuery, db: Session) -> MetricResponse:
     to_time = query.to_time
     
     if query.time_range:
-        to_time = datetime.utcnow()
+        to_time = datetime.utcnow() + timedelta(hours=2)
         time_range_str = query.time_range.value if isinstance(query.time_range, TimeRange) else query.time_range
         
         if time_range_str == "1h":
@@ -549,7 +553,7 @@ def get_dashboard_metrics(time_range: TimeRange, agent_id: Optional[str], db: Se
     logger.info(f"Getting dashboard metrics for time range: {time_range}")
     
     # Calculate time range
-    to_time = datetime.utcnow()
+    to_time = datetime.utcnow() + timedelta(hours=2)
     
     # Convert the time_range to string for comparison if it's an enum
     time_range_str = time_range.value if hasattr(time_range, 'value') else str(time_range)
@@ -1464,9 +1468,9 @@ def get_session_count(db: Session, from_time: datetime, to_time: datetime,
     # Get session count
     session_count = query.count()
     
-    # Return as a data point
+    # Return a single data point with the total count
     return [
-        MetricDataPoint(timestamp=datetime.utcnow(), value=session_count)
+        MetricDataPoint(timestamp=datetime.utcnow() + timedelta(hours=2), value=session_count)
     ]
 
 # Placeholder implementations for total calculation functions

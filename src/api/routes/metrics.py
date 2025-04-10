@@ -6,7 +6,7 @@ import os
 
 from fastapi import APIRouter, Depends, Query, HTTPException, status, Path
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, case
 
 from src.database.session import get_db
 from src.api.schemas.metrics import (
@@ -1883,4 +1883,167 @@ async def get_agent_model_relationships(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving agent-model relationship metrics: {str(e)}"
+        )
+
+@router.get(
+    "/metrics/tool/success_rate/detailed",
+    response_model=Dict[str, Any],
+    summary="Get detailed tool success rate metrics with per-tool breakdown"
+)
+async def get_tool_success_rate_detailed(
+    agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
+    from_time: Optional[datetime] = Query(None, description="Start time (ISO format)"),
+    to_time: Optional[datetime] = Query(None, description="End time (ISO format)"),
+    time_range: Optional[str] = Query("1d", description="Predefined time range (1h, 1d, 7d, 30d)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get detailed tool success rate metrics with breakdown by tool and overall statistics.
+    
+    This endpoint provides:
+    - Success rate for each individual tool
+    - Total calls for each tool
+    - Success/failure counts per tool
+    - Overall success rate across all tools
+    - Aggregated statistics
+    
+    Returns:
+        Dict[str, Any]: Detailed tool success rate metrics
+    """
+    logger.info("Querying detailed tool success rate metrics")
+    
+    # Validate time_range if provided
+    if time_range and time_range not in ["1h", "1d", "7d", "30d"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid time_range value: {time_range}. Valid values are: 1h, 1d, 7d, 30d"
+        )
+    
+    try:
+        from src.models.event import Event
+        from src.models.tool_interaction import ToolInteraction
+        from sqlalchemy import func, case
+        
+        # Calculate time range
+        to_time_value = to_time or (datetime.utcnow() + timedelta(hours=2))
+        
+        if from_time is None and time_range:
+            if time_range == "1h":
+                from_time_value = to_time_value - timedelta(hours=1)
+            elif time_range == "1d":
+                from_time_value = to_time_value - timedelta(days=1)
+            elif time_range == "7d":
+                from_time_value = to_time_value - timedelta(days=7)
+            elif time_range == "30d":
+                from_time_value = to_time_value - timedelta(days=30)
+        else:
+            from_time_value = from_time
+            
+        if from_time_value is None or to_time_value is None:
+            raise ValueError("Time range is required. Provide either from_time and to_time, or time_range.")
+        
+        # Base query for tool-specific metrics
+        tool_query = db.query(
+            ToolInteraction.tool_name,
+            func.count().label('total_calls'),
+            func.sum(case((ToolInteraction.status == 'success', 1), else_=0)).label('successful_calls'),
+            func.sum(case((ToolInteraction.status == 'error', 1), else_=0)).label('failed_calls'),
+            func.avg(
+                case((ToolInteraction.duration_ms > 0, ToolInteraction.duration_ms), else_=None)
+            ).label('avg_duration_ms'),
+            func.min(
+                case((ToolInteraction.duration_ms > 0, ToolInteraction.duration_ms), else_=None)
+            ).label('min_duration_ms'),
+            func.max(
+                case((ToolInteraction.duration_ms > 0, ToolInteraction.duration_ms), else_=None)
+            ).label('max_duration_ms')
+        ).join(
+            Event, ToolInteraction.event_id == Event.id
+        ).filter(
+            Event.timestamp >= from_time_value,
+            Event.timestamp <= to_time_value
+        )
+        
+        # Apply agent filter if provided
+        if agent_id:
+            tool_query = tool_query.filter(Event.agent_id == agent_id)
+            
+        # Group by tool name and order by total calls descending
+        tool_query = tool_query.group_by(ToolInteraction.tool_name)
+        tool_query = tool_query.order_by(func.count().desc())
+        
+        # Execute the query
+        tool_results = tool_query.all()
+        
+        # Overall metrics query
+        overall_query = db.query(
+            func.count().label('total_calls'),
+            func.sum(case((ToolInteraction.status == 'success', 1), else_=0)).label('successful_calls'),
+            func.sum(case((ToolInteraction.status == 'error', 1), else_=0)).label('failed_calls'),
+            func.avg(
+                case((ToolInteraction.duration_ms > 0, ToolInteraction.duration_ms), else_=None)
+            ).label('avg_duration_ms')
+        ).join(
+            Event, ToolInteraction.event_id == Event.id
+        ).filter(
+            Event.timestamp >= from_time_value,
+            Event.timestamp <= to_time_value
+        )
+        
+        # Apply agent filter if provided
+        if agent_id:
+            overall_query = overall_query.filter(Event.agent_id == agent_id)
+            
+        # Execute the overall query
+        overall_result = overall_query.first()
+        
+        # Format the results
+        tool_metrics = []
+        for tool in tool_results:
+            success_rate = 0
+            if tool.total_calls > 0:
+                success_rate = round((tool.successful_calls / tool.total_calls) * 100, 2)
+                
+            tool_metrics.append({
+                'tool_name': tool.tool_name,
+                'total_calls': tool.total_calls,
+                'successful_calls': tool.successful_calls,
+                'failed_calls': tool.failed_calls,
+                'success_rate': success_rate,
+                'avg_duration_ms': round(tool.avg_duration_ms) if tool.avg_duration_ms is not None and tool.avg_duration_ms > 0 else None,
+                'min_duration_ms': tool.min_duration_ms if tool.min_duration_ms is not None and tool.min_duration_ms > 0 else None,
+                'max_duration_ms': tool.max_duration_ms if tool.max_duration_ms is not None and tool.max_duration_ms > 0 else None
+            })
+        
+        # Calculate overall success rate
+        overall_success_rate = 0
+        if overall_result and overall_result.total_calls > 0:
+            overall_success_rate = round((overall_result.successful_calls / overall_result.total_calls) * 100, 2)
+        
+        # Prepare response
+        response = {
+            'time_range': {
+                'from': from_time_value.isoformat(),
+                'to': to_time_value.isoformat(),
+                'duration': time_range
+            },
+            'agent_id': agent_id,
+            'overall': {
+                'total_calls': overall_result.total_calls if overall_result else 0,
+                'successful_calls': overall_result.successful_calls if overall_result else 0,
+                'failed_calls': overall_result.failed_calls if overall_result else 0,
+                'success_rate': overall_success_rate,
+                'avg_duration_ms': round(overall_result.avg_duration_ms) if overall_result and overall_result.avg_duration_ms is not None and overall_result.avg_duration_ms > 0 else None
+            },
+            'tools': tool_metrics,
+            'unique_tools': len(tool_metrics)
+        }
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error getting detailed tool success rate metrics: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving detailed tool success rate metrics: {str(e)}"
         )

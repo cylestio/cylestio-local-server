@@ -35,26 +35,19 @@ router = APIRouter()
     summary="Get main dashboard metrics"
 )
 async def get_dashboard(
-    agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
     time_range: str = Query("30d", description="Time range (1h, 1d, 7d, 30d)"),
-    metrics: Optional[str] = Query(None, description="Comma-separated list of metrics to include"),
     db: Session = Depends(get_db)
 ):
     """
-    Get key system-wide metrics for the dashboard with trend information.
+    Get main dashboard metrics including summary stats and recent activity.
     
-    This endpoint provides aggregated metrics across all monitored agents,
-    including trends comparing to the previous period.
+    This endpoint aggregates key metrics for the main dashboard view including
+    total LLM requests, token usage, active agents, and error rates.
     
-    Args:
-        agent_id: Optional agent ID to filter by
-        time_range: Time range for metrics (1h, 1d, 7d, 30d)
-        metrics: Optional comma-separated list of metrics to include
-        
     Returns:
-        DashboardResponse: Dashboard metrics with trend information
+        DashboardResponse: Dashboard metrics and summary stats
     """
-    logger.info(f"Getting dashboard metrics, time range: {time_range}")
+    logger.info(f"Getting dashboard metrics for time_range: {time_range}")
     
     # Validate time_range
     if time_range not in ["1h", "1d", "7d", "30d"]:
@@ -63,30 +56,9 @@ async def get_dashboard(
             detail=f"Invalid time_range value: {time_range}. Valid values are: 1h, 1d, 7d, 30d"
         )
     
-    # Parse metrics list if provided
-    metric_list = None
-    if metrics:
-        metric_list = [m.strip() for m in metrics.split(',')]
-    
     try:
-        # Convert string time_range to TimeRange enum
-        time_range_enum = None
-        if time_range == "1h":
-            time_range_enum = TimeRange.HOUR
-        elif time_range == "1d":
-            time_range_enum = TimeRange.DAY
-        elif time_range == "7d":
-            time_range_enum = TimeRange.WEEK
-        elif time_range == "30d":
-            time_range_enum = TimeRange.MONTH
-        
-        # Get dashboard metrics from analysis layer
-        dashboard_data = get_dashboard_metrics(time_range_enum, agent_id, db)
-        
-        # Filter metrics if requested
-        if metric_list:
-            dashboard_data.metrics = [m for m in dashboard_data.metrics if m.metric in metric_list]
-            
+        # Get dashboard metrics
+        dashboard_data = get_dashboard_metrics(time_range, db)
         return dashboard_data
         
     except Exception as e:
@@ -539,25 +511,39 @@ async def get_agent_metrics(
     db: Session = Depends(get_db)
 ):
     """
-    Get all metrics for a specific agent.
+    Get all metrics for a specific agent in a single request.
     
-    Args:
-        agent_id: Agent ID to get metrics for
-        time_range: Time range for the metrics
-        
+    This endpoint aggregates multiple metrics for a specific agent, 
+    including LLM requests, token usage, errors, and performance stats.
+    
     Returns:
-        Dict[str, Any]: Dictionary containing all metrics for the agent
+        Dict[str, Any]: Consolidated agent metrics
     """
-    logger.info(f"Getting metrics for agent {agent_id}, time range: {time_range}")
+    logger.info(f"Getting all metrics for agent: {agent_id}")
     
-    # Validate time_range if provided
-    if time_range and time_range not in ["1h", "1d", "7d", "30d"]:
+    # Validate time_range
+    if time_range not in ["1h", "1d", "7d", "30d"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid time_range value: {time_range}. Valid values are: 1h, 1d, 7d, 30d"
         )
     
-    # Initialize metrics object
+    # Helper function to extract a single value from a metric result
+    def _extract_metric_value(metric_result):
+        if not metric_result or not metric_result.data:
+            return 0
+            
+        # If multiple data points, sum them (for breakdowns)
+        total = 0
+        for point in metric_result.data:
+            if hasattr(point, 'value'):
+                total += point.value
+            elif isinstance(point, dict) and 'value' in point:
+                total += point['value']
+        
+        return total
+    
+    # Initialize metrics object and error messages list
     metrics = {}
     error_messages = []
     
@@ -615,13 +601,6 @@ async def get_agent_metrics(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving agent metrics: {str(e)}"
         )
-
-def _extract_metric_value(metric_response: MetricResponse) -> Union[int, float]:
-    """Helper function to extract the total value from a metric response"""
-    if metric_response.data and len(metric_response.data) > 0:
-        # Sum values if multiple data points
-        return sum(point.value for point in metric_response.data)
-    return 0 
 
 # Aggregated system-wide metrics endpoints
 
@@ -1733,7 +1712,7 @@ async def get_llm_agent_usage(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving LLM agent usage: {str(e)}"
-        ) 
+        )
 
 @router.get(
     "/metrics/llm/agent_model_relationships",

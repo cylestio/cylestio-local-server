@@ -55,6 +55,28 @@ def create_api_app() -> FastAPI:
             "supported": ["v1"]
         }
         
+        # Filter out deprecated endpoints from the OpenAPI schema
+        paths = openapi_schema.get("paths", {})
+        filtered_paths = {}
+        
+        for path, path_item in paths.items():
+            # Create a new path_item that excludes any deprecated operations
+            new_path_item = {}
+            has_non_deprecated = False
+            
+            for method, operation in path_item.items():
+                # Skip deprecated operations
+                if not operation.get("deprecated", False):
+                    new_path_item[method] = operation
+                    has_non_deprecated = True
+            
+            # Only include the path if it has at least one non-deprecated operation
+            if has_non_deprecated:
+                filtered_paths[path] = new_path_item
+        
+        # Replace the paths with the filtered version
+        openapi_schema["paths"] = filtered_paths
+        
         app.openapi_schema = openapi_schema
         return app.openapi_schema
         

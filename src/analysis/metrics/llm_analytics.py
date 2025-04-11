@@ -30,6 +30,7 @@ from src.analysis.utils import (
     calculate_token_cost,
     sql_time_bucket
 )
+from src.services.pricing_service import pricing_service
 
 
 class LLMAnalytics(AnalysisInterface):
@@ -196,25 +197,53 @@ class LLMAnalytics(AnalysisInterface):
         
         print(f"DEBUG: Calculated rates: success={success_rate}, error={error_rate}")
         
-        # Calculate cost
-        cost_query = self._get_model_cost_query(filters)
-        model_costs = cost_query.all()
+        # Get model breakdown for cost calculation
+        model_query = self.db_session.query(
+            LLMInteraction.model,
+            func.sum(LLMInteraction.input_tokens).label('input_tokens'),
+            func.sum(LLMInteraction.output_tokens).label('output_tokens')
+        ).join(
+            Event, LLMInteraction.event_id == Event.id
+        )
+        
+        # Apply filters
+        model_query = self._apply_filters(model_query, filters)
+        
+        # Group by model
+        model_query = model_query.group_by(LLMInteraction.model)
+        
+        # Execute
+        model_costs = model_query.all()
         
         print(f"DEBUG: Got model costs: {len(model_costs)} records")
         
+        # Calculate total cost using pricing service
         total_cost = 0
         for cost in model_costs:
             try:
-                model_cost = calculate_token_cost(
-                    cost.input_tokens or 0,
-                    cost.output_tokens or 0,
-                    cost.model
-                )
+                model = cost.model
+                input_tokens = cost.input_tokens or 0
+                output_tokens = cost.output_tokens or 0
+                
+                # Use pricing service to calculate cost
+                cost_result = pricing_service.calculate_cost(input_tokens, output_tokens, model)
+                model_cost = cost_result['total_cost']
+                
                 total_cost += model_cost
-                print(f"DEBUG: Added cost {model_cost} for model {cost.model}")
+                print(f"DEBUG: Added cost {model_cost} for model {model}")
             except Exception as e:
                 print(f"DEBUG: Error calculating cost: {str(e)}")
                 # Continue with next model
+        
+        # If no model breakdown is available but we have token counts, use default pricing
+        if not model_costs and (result.token_count_input or result.token_count_output):
+            # Use pricing service with default model
+            cost_result = pricing_service.calculate_cost(
+                result.token_count_input or 0,
+                result.token_count_output or 0,
+                "default"
+            )
+            total_cost = cost_result['total_cost']
         
         print(f"DEBUG: Total cost = {total_cost}")
         
@@ -603,26 +632,50 @@ class LLMAnalytics(AnalysisInterface):
             return 0.0
     
     def _calculate_cost_for_agent(self, agent_id: str, filters: LLMMetricsFilter) -> float:
-        """Calculate cost for a specific agent."""
-        agent_filter = LLMMetricsFilter(
-            agent_id=agent_id,
-            model_name=filters.model_name,
-            from_time=filters.from_time,
-            to_time=filters.to_time
+        """
+        Calculate cost for a specific agent based on their model usage.
+        
+        Args:
+            agent_id: Agent ID
+            filters: Query filters
+            
+        Returns:
+            Estimated cost for this agent
+        """
+        # Get model distribution for this agent
+        model_query = self.db_session.query(
+            LLMInteraction.model,
+            func.sum(LLMInteraction.input_tokens).label('input_tokens'),
+            func.sum(LLMInteraction.output_tokens).label('output_tokens')
+        ).join(
+            Event, LLMInteraction.event_id == Event.id
+        ).filter(
+            Event.agent_id == agent_id
         )
         
-        cost_query = self._get_model_cost_query(agent_filter)
-        model_costs = cost_query.all()
+        # Apply time filters
+        if filters.from_time:
+            model_query = model_query.filter(Event.timestamp >= filters.from_time)
+        if filters.to_time:
+            model_query = model_query.filter(Event.timestamp <= filters.to_time)
         
+        # Group by model
+        model_query = model_query.group_by(LLMInteraction.model)
+        
+        # Execute
+        models = model_query.all()
+        
+        # Calculate cost for each model
         total_cost = 0
-        for cost in model_costs:
-            model_cost = calculate_token_cost(
-                cost.input_tokens or 0,
-                cost.output_tokens or 0,
-                cost.model
-            )
-            total_cost += model_cost
+        for model_row in models:
+            model = model_row.model
+            model_input = model_row.input_tokens or 0
+            model_output = model_row.output_tokens or 0
             
+            # Use the pricing service to calculate costs
+            cost_result = pricing_service.calculate_cost(model_input, model_output, model)
+            total_cost += cost_result['total_cost']
+        
         return total_cost
     
     def _calculate_cost_for_bucket(
@@ -633,50 +686,55 @@ class LLMAnalytics(AnalysisInterface):
         filters: LLMMetricsFilter
     ) -> float:
         """
-        Calculate cost for a time bucket.
+        Calculate cost for a time bucket based on model usage within that bucket.
         
-        For simplicity, we'll use the token counts directly with a default model cost
-        or calculate a more accurate cost if model filtering is applied.
+        Args:
+            bucket: Time bucket string
+            input_tokens: Number of input tokens in this bucket
+            output_tokens: Number of output tokens in this bucket
+            filters: Query filters
+            
+        Returns:
+            Estimated cost for this bucket
         """
-        if filters.model_name:
-            # If we're filtering by a specific model, use that model's pricing
-            return calculate_token_cost(
-                input_tokens,
-                output_tokens,
-                filters.model_name
-            )
-        else:
-            # Otherwise, we need to query to find the models used in this bucket
-            # This could be optimized further but would require more complex queries
-            bucket_datetime = datetime.fromisoformat(bucket) if isinstance(bucket, str) else bucket
+        # Query to get model distribution in this bucket
+        model_query = self.db_session.query(
+            LLMInteraction.model,
+            func.sum(LLMInteraction.input_tokens).label('input_tokens'),
+            func.sum(LLMInteraction.output_tokens).label('output_tokens')
+        ).join(
+            Event, LLMInteraction.event_id == Event.id
+        ).filter(
+            sql_time_bucket(Event.timestamp, filters.granularity) == bucket
+        )
+        
+        # Apply base filters
+        model_query = self._apply_filters(model_query, filters)
+        
+        # Group by model
+        model_query = model_query.group_by(LLMInteraction.model)
+        
+        # Execute
+        models = model_query.all()
+        
+        # If no model breakdown is available, use the aggregate cost calculation
+        if not models:
+            # Use the pricing service to calculate costs
+            cost_result = pricing_service.calculate_cost(input_tokens, output_tokens, "default")
+            return cost_result['total_cost']
+        
+        # Calculate cost for each model
+        total_cost = 0
+        for model_row in models:
+            model = model_row.model
+            model_input = model_row.input_tokens or 0
+            model_output = model_row.output_tokens or 0
             
-            # Determine bucket duration based on granularity
-            if filters.granularity == TimeGranularity.MINUTE:
-                bucket_end = bucket_datetime + timedelta(minutes=1)
-            elif filters.granularity == TimeGranularity.HOUR:
-                bucket_end = bucket_datetime + timedelta(hours=1)
-            else:
-                bucket_end = bucket_datetime + timedelta(days=1)
-            
-            bucket_filter = LLMMetricsFilter(
-                agent_id=filters.agent_id,
-                from_time=bucket_datetime,
-                to_time=bucket_end
-            )
-            
-            cost_query = self._get_model_cost_query(bucket_filter)
-            model_costs = cost_query.all()
-            
-            total_cost = 0
-            for cost in model_costs:
-                model_cost = calculate_token_cost(
-                    cost.input_tokens or 0,
-                    cost.output_tokens or 0,
-                    cost.model
-                )
-                total_cost += model_cost
-                
-            return total_cost 
+            # Use the pricing service to calculate costs
+            cost_result = pricing_service.calculate_cost(model_input, model_output, model)
+            total_cost += cost_result['total_cost']
+        
+        return total_cost
 
     def get_agent_model_time_distribution(
         self,

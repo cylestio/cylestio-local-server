@@ -9,6 +9,9 @@ from datetime import datetime, timedelta
 from sqlalchemy import func, text
 import json
 
+# Import the pricing service
+from src.services.pricing_service import pricing_service
+
 
 def parse_time_range(
     from_time: Optional[datetime] = None,
@@ -282,39 +285,11 @@ def calculate_token_cost(input_tokens: int, output_tokens: int, model: str) -> f
     Returns:
         Estimated cost in USD
     """
-    # Default rates if model is not recognized
-    input_rate = 0.0001  # $0.01 per 100 tokens
-    output_rate = 0.0002  # $0.02 per 100 tokens
+    # Use the pricing service to calculate costs
+    cost_data = pricing_service.calculate_cost(input_tokens, output_tokens, model)
     
-    # Define rates for common models
-    model_rates = {
-        'gpt-3.5-turbo': {'input': 0.0000015, 'output': 0.000002},  # $0.15/0.20 per 100K
-        'gpt-4': {'input': 0.00003, 'output': 0.00006},             # $3/6 per 100K
-        'gpt-4-turbo': {'input': 0.00001, 'output': 0.00003},       # $1/3 per 100K
-        'gpt-4o': {'input': 0.00001, 'output': 0.00003},            # $1/3 per 100K
-        'claude-3-opus': {'input': 0.00001, 'output': 0.00003},     # $1/3 per 100K
-        'claude-3-sonnet': {'input': 0.000003, 'output': 0.000015}, # $0.3/1.5 per 100K
-        'claude-3-haiku': {'input': 0.00000025, 'output': 0.000001} # $0.025/0.1 per 100K
-    }
-    
-    # Check for exact model match
-    if model in model_rates:
-        input_rate = model_rates[model]['input']
-        output_rate = model_rates[model]['output']
-    else:
-        # Check for partial matches
-        for model_name, rates in model_rates.items():
-            if model_name in model.lower():
-                input_rate = rates['input']
-                output_rate = rates['output']
-                break
-    
-    # Calculate cost
-    input_cost = input_tokens * input_rate
-    output_cost = output_tokens * output_rate
-    total_cost = input_cost + output_cost
-    
-    return total_cost
+    # Return the total cost
+    return cost_data['total_cost']
 
 
 def deep_get(dictionary: Dict[str, Any], path: str, default=None) -> Any:

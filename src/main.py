@@ -5,6 +5,8 @@ from src.api import create_api_app
 from src.utils.logging import configure_logging, get_logger
 from src.config.settings import get_settings
 from src.models.base import init_db, create_all, DATABASE_URL
+# Import pricing service
+from src.services.pricing_service import pricing_service
 
 # Configure logging first
 configure_logging()
@@ -28,11 +30,17 @@ async def startup_event():
         logger.info("Initializing database and creating tables...")
         init_db()
         logger.info("Database initialization successful!")
+        
+        # Initialize pricing service
+        logger.info("Initializing pricing service...")
+        # Just accessing the pricing service will trigger its initialization
+        # due to the singleton pattern
+        pricing_service.reload_pricing_data()
+        logger.info("Pricing service initialized successfully")
     except Exception as e:
-        logger.critical(f"Fatal error during database initialization: {e}", exc_info=True)
-        logger.critical("Application cannot start due to database initialization failure")
-        # Exit the application if database initialization fails
-        # This is preferred over continuing with a broken database
+        logger.critical(f"Fatal error during initialization: {e}", exc_info=True)
+        logger.critical("Application cannot start due to initialization failure")
+        # Exit the application if initialization fails
         sys.exit(1)
     
     logger.info("Cylestio Local Server API started successfully")

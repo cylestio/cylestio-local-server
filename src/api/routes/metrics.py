@@ -24,6 +24,8 @@ from src.analysis.metrics.llm_analytics import LLMAnalytics
 from src.utils.logging import get_logger
 from src.analysis.utils import parse_time_range
 from src.analysis.utils import sql_time_bucket
+# Import the pricing service
+from src.services.pricing_service import pricing_service
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -1249,73 +1251,7 @@ async def calculate_token_usage_cost(
         token_usage_result = token_metrics.get_token_usage_by_model(params=metrics_params)
         token_usage_by_model = token_usage_result.items # Access items from QueryResult
 
-        # Load model pricing data
-        csv_path = os.path.join("resources", "full_llm_models_pricing_08April2025.csv")
-        model_pricing = {}
-        with open(csv_path, mode='r', encoding='utf-8') as csv_file:
-            csv_reader = csv.DictReader(csv_file)
-            for row in csv_reader:
-                # Construct a more robust key combining provider and model
-                provider_key = row.get('Provider', '').strip().lower()
-                model_key = row.get('Model', '').strip().lower()
-                
-                # Handle potential variations in model naming (e.g., version info)
-                # This basic key might need refinement based on actual data patterns
-                combined_key = f"{provider_key}-{model_key}" 
-                
-                input_price_str = row.get('Input Price', '0').replace('$', '').strip()
-                output_price_str = row.get('Output Price', '0').replace('$', '').strip()
-
-                # Handle price ranges (e.g., "0.00125–0.0025")
-                input_price = 0.0
-                try:
-                    if '–' in input_price_str or '-' in input_price_str:
-                        # Take average of range
-                        range_parts = input_price_str.replace('–', '-').split('-')
-                        range_values = []
-                        for part in range_parts:
-                            if part and part != 'N/A':
-                                try:
-                                    range_values.append(float(part.strip()))
-                                except ValueError:
-                                    pass
-                        if range_values:
-                            input_price = sum(range_values) / len(range_values)
-                            logger.debug(f"Parsed price range {input_price_str} as average: {input_price}")
-                    elif input_price_str and input_price_str != 'N/A':
-                        input_price = float(input_price_str)
-                except ValueError:
-                    logger.warning(f"Could not parse input price '{input_price_str}' for {combined_key}, using 0.0")
-                
-                # Handle price ranges for output price too
-                output_price = 0.0
-                try:
-                    if '–' in output_price_str or '-' in output_price_str:
-                        # Take average of range
-                        range_parts = output_price_str.replace('–', '-').split('-')
-                        range_values = []
-                        for part in range_parts:
-                            if part and part != 'N/A':
-                                try:
-                                    range_values.append(float(part.strip()))
-                                except ValueError:
-                                    pass
-                        if range_values:
-                            output_price = sum(range_values) / len(range_values)
-                            logger.debug(f"Parsed price range {output_price_str} as average: {output_price}")
-                    elif output_price_str and output_price_str != 'N/A':
-                        output_price = float(output_price_str)
-                except ValueError:
-                    logger.warning(f"Could not parse output price '{output_price_str}' for {combined_key}, using 0.0")
-
-                model_pricing[combined_key] = {
-                    'provider': row.get('Provider', '').strip(),
-                    'model': row.get('Model', '').strip(),
-                    'input_price': input_price,
-                    'output_price': output_price
-                }
-        
-        # Calculate costs for each model
+        # Calculate costs for each model using the pricing service
         cost_breakdown = []
         total_input_tokens = 0
         total_output_tokens = 0
@@ -1331,139 +1267,27 @@ async def calculate_token_usage_cost(
                  continue
 
             model_name = model_data.get('model', '')
-            vendor = model_data.get('vendor', '').lower()
-
-            # Try to find pricing data for this model
-            pricing_key = None
-            
-            # Clean model name for better matching
-            clean_model_name = model_name.lower()
-            # Remove date/version suffixes like -20240307
-            clean_model_name = '-'.join([part for part in clean_model_name.split('-') if not (part.isdigit() and len(part) >= 8)])
-            # Replace dashes with spaces for better matching with CSV format
-            clean_model_name_alt = clean_model_name.replace('-', ' ')
-            # Additional normalization for number formats (3-5 vs 3.5)
-            clean_model_name_dots = clean_model_name.replace('-', '.')
-            
-            # Special case handling for common models
-            if "gpt-3.5-turbo" in clean_model_name:
-                base_model_name = "gpt-3.5-turbo"
-            elif "gpt-4" in clean_model_name and "turbo" in clean_model_name:
-                base_model_name = "gpt-4-turbo"
-            elif "gpt-4" in clean_model_name:
-                base_model_name = "gpt-4"
-            elif "claude-3-haiku" in clean_model_name:
-                base_model_name = "claude-3-haiku"
-            elif "claude-3-sonnet" in clean_model_name or "claude-3-5-sonnet" in clean_model_name:
-                base_model_name = "claude-3.5-sonnet"
-            elif "claude-3-opus" in clean_model_name:
-                base_model_name = "claude-3-opus"
-            else:
-                base_model_name = clean_model_name
-                
-            logger.debug(f"Looking for pricing match. Original: '{model_name}', Base: '{base_model_name}', Cleaned: '{clean_model_name}', Alt: '{clean_model_name_alt}', Dots: '{clean_model_name_dots}'")
-            
-            # Debug all available pricing keys to help with diagnostics
-            all_keys = list(model_pricing.keys())
-            logger.debug(f"Available pricing keys: {all_keys}")
-            
-            for key in model_pricing:
-                csv_model_name = model_pricing[key]['model'].lower()
-                csv_provider = model_pricing[key]['provider'].lower()
-                
-                # Try multiple matching strategies
-                provider_match = vendor in csv_provider or csv_provider in vendor
-                
-                # Debug info for specific models we're having trouble with
-                if "gpt-3.5" in model_name.lower() or "claude-3.5" in model_name.lower() or "claude-3-5" in model_name.lower():
-                    logger.debug(f"Trying to match {model_name} with {csv_model_name} (Key: {key})")
-                    logger.debug(f"Provider match: {provider_match}, CSV provider: {csv_provider}, Vendor: {vendor}")
-                
-                # 0. Base model match (for specially handled common models)
-                model_match = False
-                if base_model_name.lower() in csv_model_name or csv_model_name in base_model_name.lower():
-                    model_match = True
-                    logger.debug(f"Base model name match: {base_model_name} matches {csv_model_name}")
-                
-                # 1. Direct substring match
-                if not model_match:
-                    model_match = clean_model_name in csv_model_name or csv_model_name in clean_model_name
-                    if model_match and ("gpt-3.5" in model_name.lower() or "claude-3.5" in model_name.lower()):
-                        logger.debug(f"Direct substring match: {clean_model_name} matches {csv_model_name}")
-                
-                # 2. Space-normalized match (for "claude 3 haiku" vs "claude-3-haiku")
-                if not model_match:
-                    model_match = clean_model_name_alt in csv_model_name or csv_model_name in clean_model_name_alt
-                    if model_match and ("gpt-3.5" in model_name.lower() or "claude-3.5" in model_name.lower()):
-                        logger.debug(f"Space-normalized match: {clean_model_name_alt} matches {csv_model_name}")
-                
-                # 3. Number format normalized match (for "claude-3-5" vs "claude 3.5")
-                if not model_match:
-                    # Handle version numbers with dots vs dashes (3.5 vs 3-5)
-                    model_match = clean_model_name_dots in csv_model_name or csv_model_name.replace('.', '-') in clean_model_name
-                    if model_match and ("gpt-3.5" in model_name.lower() or "claude-3.5" in model_name.lower()):
-                        logger.debug(f"Number format match: {clean_model_name_dots} matches {csv_model_name}")
-                
-                # 4. Core name match - focus on key identifiers
-                if not model_match:
-                    # Extract key parts like "gpt-4" from "gpt-4-turbo-preview"
-                    db_core = ''.join([c for c in clean_model_name if c.isalnum() or c in ['-', '.']])
-                    csv_core = ''.join([c for c in csv_model_name if c.isalnum() or c in [' ', '.']])
-                    
-                    # Special cases for common model families
-                    if ("gpt-3.5" in db_core and "gpt-3.5" in csv_core) or \
-                       ("gpt-4" in db_core and "gpt-4" in csv_core) or \
-                       ("claude-3" in db_core and "claude 3" in csv_core):
-                        model_match = True
-                        if "gpt-3.5" in model_name.lower() or "claude-3.5" in model_name.lower():
-                            logger.debug(f"Special case match: {db_core} matches {csv_core}")
-                    elif db_core in csv_core or csv_core in db_core:
-                        model_match = True
-                        if "gpt-3.5" in model_name.lower() or "claude-3.5" in model_name.lower():
-                            logger.debug(f"Core match: {db_core} matches {csv_core}")
-                
-                # 5. Manual override for certain models
-                if not model_match:
-                    # GPT-3.5 Turbo special case
-                    if "gpt-3.5-turbo" in model_name.lower() and "gpt-3.5 turbo" in csv_model_name:
-                        model_match = True
-                        logger.debug(f"Manual override match for GPT-3.5 Turbo")
-                    # Claude 3.5 Sonnet special case
-                    elif ("claude-3-5-sonnet" in model_name.lower() or "claude-3.5-sonnet" in model_name.lower()) and "claude 3.5 sonnet" in csv_model_name:
-                        model_match = True
-                        logger.debug(f"Manual override match for Claude 3.5 Sonnet")
-                
-                if (provider_match or not vendor) and model_match:
-                    logger.debug(f"FINAL MATCH! DB model '{model_name}' matches CSV model '{model_pricing[key]['model']}' with prices: Input=${model_pricing[key]['input_price']}, Output=${model_pricing[key]['output_price']}")
-                    pricing_key = key
-                    break
-            
-            # Additional debug for GPT-3.5 Turbo
-            if "gpt-3.5" in model_name.lower() and not pricing_key:
-                logger.warning(f"Failed to match GPT-3.5 Turbo model: {model_name}")
-
-            # Default pricing if not found
-            input_price = 0.0
-            output_price = 0.0
-
-            if pricing_key:
-                input_price = model_pricing[pricing_key]['input_price']
-                output_price = model_pricing[pricing_key]['output_price']
-            else:
-                logger.warning(f"Pricing not found for model: {model_name} (Vendor: {vendor}). Using default $0.0.")
+            vendor = model_data.get('vendor', '')
 
             # Get token counts
             input_tokens = model_data.get('input_tokens', 0) or 0
             output_tokens = model_data.get('output_tokens', 0) or 0
             model_total_tokens = input_tokens + output_tokens
 
-            # Log values before calculation for debugging
-            logger.debug(f"Calculating cost for {model_name}: Tokens(Input={input_tokens}, Output={output_tokens}), Prices(Input={input_price}, Output={output_price})")
-
-            # Calculate costs
-            input_cost = (input_tokens / 1000) * input_price
-            output_cost = (output_tokens / 1000) * output_price
-            model_total_cost = input_cost + output_cost
+            # Use pricing service to calculate costs
+            cost_result = pricing_service.calculate_cost(
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                model=model_name,
+                vendor=vendor
+            )
+            
+            # Extract costs from result
+            input_price = cost_result['input_price_per_1k']
+            output_price = cost_result['output_price_per_1k']
+            input_cost = cost_result['input_cost']
+            output_cost = cost_result['output_cost']
+            model_total_cost = cost_result['total_cost']
 
             logger.debug(f"Calculated costs for {model_name}: InputCost={input_cost:.6f}, OutputCost={output_cost:.6f}, TotalCost={model_total_cost:.6f}")
 
@@ -1484,9 +1308,9 @@ async def calculate_token_usage_cost(
                 'total_tokens': model_total_tokens,
                 'input_price_per_1k': round(input_price, 6),  # Price per 1K tokens
                 'output_price_per_1k': round(output_price, 6),  # Price per 1K tokens
-                'input_cost': round(input_cost, 4),  # Total cost for input tokens
-                'output_cost': round(output_cost, 4),  # Total cost for output tokens
-                'total_cost': round(model_total_cost, 4)  # Total cost for this model
+                'input_cost': round(input_cost, 6),  # Total cost for input tokens
+                'output_cost': round(output_cost, 6),  # Total cost for output tokens
+                'total_cost': round(model_total_cost, 6)  # Total cost for this model
             })
 
         # Assemble the final response
@@ -1497,9 +1321,9 @@ async def calculate_token_usage_cost(
                     "input_tokens": total_input_tokens,
                     "output_tokens": total_output_tokens,
                     "total_tokens": total_tokens,
-                    "input_cost": total_input_cost,
-                    "output_cost": total_output_cost,
-                    "total_cost": total_input_cost + total_output_cost
+                    "input_cost": round(total_input_cost, 6),
+                    "output_cost": round(total_output_cost, 6),
+                    "total_cost": round(total_input_cost + total_output_cost, 6)
                 }
             },
             "pricing_note": "Input and output prices are per 1,000 tokens. Costs are calculated as (tokens/1000) * price.",

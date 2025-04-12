@@ -7,12 +7,12 @@ class TelemetryEventBase(BaseModel):
     """Base model for telemetry events"""
     schema_version: str = Field(..., description="Schema version")
     timestamp: str = Field(..., description="Event timestamp in ISO format")
-    trace_id: str = Field(..., description="Trace identifier")
+    trace_id: Optional[str] = Field(None, description="Trace identifier")
     span_id: Optional[str] = Field(None, description="Span identifier")
     parent_span_id: Optional[str] = Field(None, description="Parent span identifier")
     name: str = Field(..., description="Event name")
     level: str = Field(..., description="Log level")
-    agent_id: str = Field(..., description="Agent identifier")
+    agent_id: Optional[str] = Field(None, description="Agent identifier")
     attributes: Dict[str, Any] = Field(default_factory=dict, description="Event attributes")
 
     @validator('timestamp')
@@ -24,6 +24,42 @@ class TelemetryEventBase(BaseModel):
             return v
         except (ValueError, TypeError):
             raise ValueError("Invalid timestamp format. Must be ISO format (YYYY-MM-DDTHH:MM:SS.mmmmmm)")
+    
+    @validator('agent_id', pre=True, always=True)
+    def validate_agent_id(cls, v, values):
+        """
+        Validate agent_id field.
+        If agent_id is not provided, attempt to extract it from:
+        1. session.id in attributes (for framework events)
+        2. host.name in attributes
+        3. Default to "unknown-agent" as fallback
+        """
+        if v:
+            return v
+            
+        # Try to extract from attributes if available
+        attributes = values.get('attributes', {})
+        
+        # Check for session.id in attributes (common for framework events)
+        if 'session.id' in attributes:
+            return attributes['session.id']
+            
+        # Check for host.name in attributes
+        if 'host.name' in attributes:
+            return attributes['host.name']
+            
+        # Generate a default agent_id
+        return "unknown-agent"
+    
+    @validator('trace_id', pre=True)
+    def validate_trace_id(cls, v):
+        """
+        Validate trace_id field.
+        If trace_id is null, convert to a string "null-trace"
+        """
+        if v is None:
+            return "null-trace"
+        return v
 
     class Config:
         json_schema_extra = {

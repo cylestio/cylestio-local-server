@@ -6,8 +6,10 @@ events in the database.
 """
 import json
 import logging
+import traceback
 from typing import Dict, Any, List, Union, Optional, Tuple
 from datetime import datetime, timedelta
+from uuid import uuid4
 
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
@@ -17,8 +19,13 @@ from src.models.agent import Agent
 from src.models.trace import Trace
 from src.models.span import Span
 from src.models.llm_interaction import LLMInteraction
-from src.models.security_alert import SecurityAlert
+from src.models.security_alert import SecurityAlert, SecurityAlertTrigger
 from src.models.framework_event import FrameworkEvent
+from src.models.session import Session as SessionModel
+from src.models.tool_interaction import ToolInteraction
+
+# Import our custom JSON encoder
+from src.utils.json_serializer import dumps, loads
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -114,24 +121,26 @@ class SimpleProcessor:
     
     def process_json_event(self, json_data: str) -> Dict[str, Any]:
         """
-        Process a single event from JSON string.
+        Process a single event from a JSON string.
         
         Args:
-            json_data: JSON string containing event data
+            json_data: JSON string containing the event data
             
         Returns:
-            Dict with processing results
+            Dict[str, Any]: Process result
         """
         try:
-            event_data = json.loads(json_data)
+            # Parse JSON data
+            event_data = loads(json_data)
+            
+            # Process the event
             return self.process_event(event_data)
         except json.JSONDecodeError as e:
-            logger.error(f"Invalid JSON: {str(e)}")
-            return {
-                "success": False,
-                "error": f"Invalid JSON: {str(e)}",
-                "details": {"json_sample": json_data[:100] + "..." if len(json_data) > 100 else json_data}
-            }
+            logger.error(f"JSON decode error: {str(e)}")
+            raise ProcessingError(f"Invalid JSON: {str(e)}")
+        except Exception as e:
+            logger.error(f"Error processing JSON event: {str(e)}")
+            raise ProcessingError(f"Processing error: {str(e)}")
     
     def process_batch(self, events_data: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
@@ -209,33 +218,31 @@ class SimpleProcessor:
     
     def process_json_batch(self, json_data: str) -> Dict[str, Any]:
         """
-        Process a batch of events from JSON string.
-        
-        The JSON should be an array of event objects.
+        Process a batch of events from a JSON string.
         
         Args:
-            json_data: JSON string containing an array of events
+            json_data: JSON string containing an array of event data
             
         Returns:
-            Dict with batch processing results
+            Dict[str, Any]: Process result
         """
         try:
-            events_data = json.loads(json_data)
-            if not isinstance(events_data, list):
-                return {
-                    "success": False,
-                    "error": "JSON must contain an array of events",
-                    "details": {"type": type(events_data).__name__}
-                }
+            # Parse JSON data
+            events_data = loads(json_data)
             
+            # Check if the data is a list
+            if not isinstance(events_data, list):
+                # Handle case where a single event is provided instead of an array
+                return self.process_event(events_data)
+            
+            # Process the batch
             return self.process_batch(events_data)
         except json.JSONDecodeError as e:
-            logger.error(f"Invalid JSON: {str(e)}")
-            return {
-                "success": False,
-                "error": f"Invalid JSON: {str(e)}",
-                "details": {"json_sample": json_data[:100] + "..." if len(json_data) > 100 else json_data}
-            }
+            logger.error(f"JSON decode error: {str(e)}")
+            raise ProcessingError(f"Invalid JSON: {str(e)}")
+        except Exception as e:
+            logger.error(f"Error processing JSON batch: {str(e)}")
+            raise ProcessingError(f"Batch processing error: {str(e)}")
     
     def _validate_event(self, event_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -405,7 +412,8 @@ class SimpleProcessor:
             span_id=event_data.get("span_id"),
             parent_span_id=event_data.get("parent_span_id"),
             schema_version=event_data.get("schema_version", "1.0"),
-            event_type=event_type
+            event_type=event_type,
+            raw_data=event_data  # Store the entire event data in raw_data
         )
         
         # Set relationships
@@ -1011,7 +1019,8 @@ def process_event(event_data: Dict[str, Any], db_session: Session) -> Event:
             name=event_data["name"],
             level=event_data["level"],
             agent_id=event_data["agent_id"],
-            attributes=event_data.get("attributes", {})
+            attributes=event_data.get("attributes", {}),
+            raw_data=event_data  # Store the entire event data in raw_data
         )
         
         # Add to session

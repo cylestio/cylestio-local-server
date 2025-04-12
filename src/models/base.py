@@ -13,6 +13,10 @@ import importlib
 from sqlalchemy import create_engine, event, inspect
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.ext.declarative import DeclarativeMeta
+
+# Import our custom JSON encoder
+from src.utils.json_serializer import dumps, loads
 
 # Create a logger
 logger = logging.getLogger(__name__)
@@ -31,11 +35,13 @@ except ImportError:
     DATABASE_URL = os.environ.get("DATABASE_URL", f"sqlite:///{DEFAULT_DB_PATH}")
     logger.warning(f"Using fallback database URL: {DATABASE_URL}")
 
-# Create the SQLAlchemy engine
+# Create the SQLAlchemy engine with custom JSON serializer
 engine = create_engine(
     DATABASE_URL,
     connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {},
-    echo=os.environ.get("SQL_ECHO", "false").lower() == "true"
+    echo=os.environ.get("SQL_ECHO", "false").lower() == "true",
+    json_serializer=dumps,
+    json_deserializer=loads
 )
 
 # Log database information

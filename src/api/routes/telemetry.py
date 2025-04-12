@@ -16,6 +16,7 @@ from src.api.schemas.telemetry import (
 from src.processing.simple_processor import SimpleProcessor
 from src.models.event import Event
 from src.services.security_event_processor import process_security_event, verify_security_event
+from src.utils.json_serializer import dumps, loads
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -88,10 +89,12 @@ async def create_telemetry_event(
         TelemetryEventResponse: Response with event processing result
     """
     logger.info(f"Processing telemetry event: {event.name}")
+    logger.debug(f"Event data: {event.dict()}")
     
     try:
         # Convert Pydantic model to dict for processing
         event_dict = event.dict()
+        logger.debug(f"Event dict before processing: {dumps(event_dict)}")
         
         # Begin transaction
         processed_event = None
@@ -99,6 +102,10 @@ async def create_telemetry_event(
         try:
             # Process the event
             processed_event = process_event(event_dict, db)
+            
+            # Log processed event details
+            logger.debug(f"Processed event ID: {processed_event.id}, Name: {processed_event.name}")
+            logger.debug(f"Raw data saved: {processed_event.raw_data}")
             
             # Commit the transaction if successful
             db.commit()

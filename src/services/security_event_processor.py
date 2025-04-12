@@ -102,9 +102,7 @@ def process_security_event(db_session: Session, event_data: Dict[str, Any]) -> T
                     trace_id=trace_id,
                     parent_span_id=parent_span_id,
                     name=event_name,
-                    start_timestamp=timestamp,
-                    status="UNSET",
-                    is_complete=False
+                    start_timestamp=timestamp
                 )
                 db_session.add(span)
                 db_session.flush()

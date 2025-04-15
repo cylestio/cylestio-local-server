@@ -404,7 +404,9 @@ class ConversationService:
                 LLMInteraction.total_tokens,
                 LLMInteraction.stop_reason,
                 LLMInteraction.request_data,
-                LLMInteraction.response_content
+                LLMInteraction.response_content,
+                LLMInteraction.related_interaction_id,
+                LLMInteraction.interaction_type
             )
             .join(LLMInteraction, Event.id == LLMInteraction.event_id)
             .join(Agent, Event.agent_id == Agent.agent_id, isouter=True)
@@ -439,23 +441,39 @@ class ConversationService:
             status = "success"
             if row.stop_reason and row.stop_reason != 'end_turn':
                 status = "error"
+            
+            # If this interaction has a related interaction, try to fetch it for the request data
+            start_data = None
+            if row.related_interaction_id:
+                # Get the related start interaction
+                try:
+                    start_row = (
+                        self.db_session.query(LLMInteraction.request_data)
+                        .filter(LLMInteraction.id == row.related_interaction_id)
+                        .first()
+                    )
+                    if start_row and start_row.request_data:
+                        start_data = start_row.request_data
+                except Exception as e:
+                    logger.warning(f"Error fetching related interaction: {e}")
                 
-            # Extract content from request and response
-            request_content = None
-            response_content = None
+            # Use request data from either finish or start interaction
+            request_data = row.request_data
+            if (not request_data or request_data == '{}' or request_data == {}) and start_data:
+                request_data = start_data
+                
+            # Extract content using our comprehensive extractor method
+            request_content = self._extract_message_content(request_data)
+            response_content = self._extract_message_content(row.response_content)
             
-            try:
-                if row.request_data and 'content' in row.request_data:
-                    request_content = row.request_data['content']
-                    
-                if row.response_content:
-                    if isinstance(row.response_content, str):
-                        response_content = row.response_content
-                    elif isinstance(row.response_content, dict) and 'content' in row.response_content:
-                        response_content = row.response_content['content']
-            except (KeyError, TypeError) as e:
-                logger.warning(f"Error extracting content from LLM interaction: {e}")
+            # Add placeholders if content is empty
+            if not request_content:
+                request_content = "<Request data not available>"
+                
+            if not response_content:
+                response_content = "<Response data not available>"
             
+            # Create the request object
             request = LLMRequestDetail(
                 id=f"{row.event_id}_{row.interaction_id}",
                 timestamp=row.timestamp,
@@ -463,9 +481,9 @@ class ConversationService:
                 span_id=row.span_id,
                 model=row.model,
                 status=status,
-                duration_ms=row.duration_ms,
-                input_tokens=row.input_tokens,
-                output_tokens=row.output_tokens,
+                duration_ms=row.duration_ms or 0,  # Ensure duration is never null
+                input_tokens=row.input_tokens or 0,  # Ensure tokens are never null
+                output_tokens=row.output_tokens or 0,
                 agent_id=row.agent_id,
                 agent_name=row.agent_name or f"Agent-{row.agent_id[:8]}",
                 content=request_content,

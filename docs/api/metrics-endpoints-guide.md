@@ -194,6 +194,353 @@ The LLM Analytics API provides comprehensive metrics about language model usage 
 }
 ```
 
+## LLM Conversation Explorer API
+
+The LLM Conversation Explorer API provides access to the conversations and individual LLM requests across your AI agents, enabling you to explore conversation history, analyze interactions, and debug issues.
+
+### Get LLM Conversations
+
+Lists all LLM conversations, with optional filtering by agent or model.
+
+**Endpoint**: `GET /v1/metrics/llm/conversations`
+
+**Query Parameters**:
+- `agent_id` (string, optional): Filter conversations by agent ID
+- `model` (string, optional): Filter conversations by model name
+- `from_time` (datetime, optional): Start time (ISO format)
+- `to_time` (datetime, optional): End time (ISO format)
+- `page` (integer, default: 1): Page number for pagination
+- `page_size` (integer, default: 20): Number of items per page
+
+**Response**:
+```json
+{
+  "items": [
+    {
+      "trace_id": "44f5da24d41e94565ed61ca72eae0f6b",
+      "agent_id": "weather-agent",
+      "agent_name": "Weather Agent",
+      "first_timestamp": "2025-04-09T19:46:39.397602",
+      "last_timestamp": "2025-04-09T19:47:04.156019",
+      "request_count": 7,
+      "total_tokens": 1120,
+      "user_messages": 3,
+      "assistant_messages": 4,
+      "summary": "hi"
+    },
+    {
+      "trace_id": "c9b30c3c7570430e96689ef917269e46",
+      "agent_id": "weather-agent",
+      "agent_name": "Weather Agent",
+      "first_timestamp": "2025-04-12T13:29:44.703782",
+      "last_timestamp": "2025-04-12T13:30:06.956871",
+      "request_count": 5,
+      "total_tokens": 4750,
+      "user_messages": 2,
+      "assistant_messages": 3,
+      "summary": "any alerts in nyc?"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "page_size": 20,
+    "total": 2,
+    "total_pages": 1,
+    "has_next": false,
+    "has_prev": false
+  }
+}
+```
+
+### Get LLM Conversation Details
+
+Retrieves detailed information about a specific conversation, including all messages exchanged between user and assistant.
+
+**Endpoint**: `GET /v1/metrics/llm/conversations/{trace_id}`
+
+**Path Parameters**:
+- `trace_id`: The unique trace ID of the conversation to retrieve
+
+**Query Parameters**:
+- `page` (integer, default: 1): Page number for pagination
+- `page_size` (integer, default: 50): Number of messages per page
+
+**Response**:
+```json
+{
+  "items": [
+    {
+      "id": "211_73",
+      "timestamp": "2025-04-09T19:46:39.397602",
+      "trace_id": "44f5da24d41e94565ed61ca72eae0f6b",
+      "span_id": "f9a882a90c2d7202",
+      "model": "claude-3-5-sonnet-20240620",
+      "role": "user",
+      "message_type": "request",
+      "status": "pending",
+      "duration_ms": 0,
+      "input_tokens": 523,
+      "output_tokens": 0,
+      "content": "hi",
+      "parent_id": null,
+      "agent_id": "weather-agent",
+      "agent_name": "Agent-weather-"
+    },
+    {
+      "id": "212_74",
+      "timestamp": "2025-04-09T19:46:41.126943",
+      "trace_id": "44f5da24d41e94565ed61ca72eae0f6b",
+      "span_id": "f9a882a90c2d7202",
+      "model": "claude-3-5-sonnet-20240620",
+      "role": "assistant",
+      "message_type": "response",
+      "status": "success",
+      "duration_ms": 1729,
+      "input_tokens": 0,
+      "output_tokens": 62,
+      "content": "Hello! How can I assist you today? I'm here to help with weather-related information...",
+      "parent_id": "211_73",
+      "agent_id": "weather-agent",
+      "agent_name": "Agent-weather-"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "page_size": 50,
+    "total": 9,
+    "total_pages": 1,
+    "has_next": false,
+    "has_prev": false
+  }
+}
+```
+
+### Get LLM Requests
+
+Lists all LLM requests, with optional filtering by agent or model. This provides an overview of individual LLM interactions.
+
+**Endpoint**: `GET /v1/metrics/llm/requests`
+
+**Query Parameters**:
+- `agent_id` (string, optional): Filter requests by agent ID
+- `model` (string, optional): Filter requests by model name
+- `from_time` (datetime, optional): Start time (ISO format)
+- `to_time` (datetime, optional): End time (ISO format)
+- `page` (integer, default: 1): Page number for pagination
+- `page_size` (integer, default: 20): Number of items per page
+
+**Response**:
+```json
+{
+  "items": [
+    {
+      "id": "344_106",
+      "timestamp": "2025-04-12T13:30:06.956871",
+      "trace_id": "c9b30c3c7570430e96689ef917269e46",
+      "span_id": "ac979a244434ee5d",
+      "model": "claude-3-haiku-20240307",
+      "status": "success",
+      "duration_ms": 921,
+      "input_tokens": 505,
+      "output_tokens": 75,
+      "agent_id": "weather-agent",
+      "agent_name": "Agent-weather-",
+      "content": "ok 9898-****-****-9898",
+      "response": "I apologize, but I cannot perform any actions related to credit card numbers..."
+    },
+    {
+      "id": "340_104",
+      "timestamp": "2025-04-12T13:30:01.041543",
+      "trace_id": "c9b30c3c7570430e96689ef917269e46",
+      "span_id": "933021d18dbe73be",
+      "model": "claude-3-haiku-20240307",
+      "status": "success",
+      "duration_ms": 1682,
+      "input_tokens": 2528,
+      "output_tokens": 153,
+      "agent_id": "weather-agent",
+      "agent_name": "Agent-weather-",
+      "content": "<Request data not available>",
+      "response": "The key alerts for the NYC area based on the information provided are..."
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "page_size": 20,
+    "total": 60,
+    "total_pages": 3,
+    "has_next": true,
+    "has_prev": false
+  }
+}
+```
+
+### Get LLM Request Details
+
+Retrieves detailed information about a specific LLM request, including full prompt and response content.
+
+**Endpoint**: `GET /v1/metrics/llm/requests/{request_id}`
+
+**Path Parameters**:
+- `request_id`: The unique ID of the request to retrieve
+
+**Response**:
+```json
+{
+  "id": "344_106",
+  "timestamp": "2025-04-12T13:30:06.956871",
+  "trace_id": "c9b30c3c7570430e96689ef917269e46",
+  "span_id": "ac979a244434ee5d",
+  "model": "claude-3-haiku-20240307",
+  "status": "success",
+  "duration_ms": 921,
+  "input_tokens": 505,
+  "output_tokens": 75,
+  "agent_id": "weather-agent",
+  "agent_name": "Agent-weather-",
+  "content": "ok 9898-****-****-9898",
+  "response": "I apologize, but I cannot perform any actions related to credit card numbers or other financial information. As an AI assistant, I do not have the capability to process or handle sensitive financial data. Please do not provide me with any credit card information or other private financial details. I'm happy to assist you with other tasks that do not involve personal financial information.",
+  "request_data": {
+    "model": "claude-3-haiku-20240307",
+    "messages": [
+      {
+        "role": "user",
+        "content": "ok 9898-****-****-9898"
+      }
+    ]
+  },
+  "response_data": {
+    "id": "msg_01Xxzj8Ac5V8TyQMUjJKnxxx",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "I apologize, but I cannot perform any actions related to credit card numbers or other financial information..."
+      }
+    ],
+    "model": "claude-3-haiku-20240307",
+    "stop_reason": "end_turn",
+    "stop_sequence": null,
+    "usage": {
+      "input_tokens": 505,
+      "output_tokens": 75
+    }
+  }
+}
+```
+
+### Example: Building an LLM Explorer UI
+
+```typescript
+// Example usage in a React component
+import React, { useState, useEffect } from 'react';
+
+function ConversationExplorer() {
+  const [conversations, setConversations] = useState([]);
+  const [selectedConversation, setSelectedConversation] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(false);
+  
+  // Fetch conversations
+  useEffect(() => {
+    async function fetchConversations() {
+      setLoading(true);
+      try {
+        const response = await fetch('/v1/metrics/llm/conversations?page=1&page_size=20');
+        const data = await response.json();
+        setConversations(data.items);
+      } catch (error) {
+        console.error('Error fetching conversations:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    fetchConversations();
+  }, []);
+  
+  // Fetch conversation details when a conversation is selected
+  useEffect(() => {
+    if (!selectedConversation) return;
+    
+    async function fetchConversationDetails() {
+      setLoading(true);
+      try {
+        const response = await fetch(`/v1/metrics/llm/conversations/${selectedConversation.trace_id}?page=1&page_size=50`);
+        const data = await response.json();
+        setMessages(data.items);
+      } catch (error) {
+        console.error('Error fetching conversation details:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    fetchConversationDetails();
+  }, [selectedConversation]);
+  
+  return (
+    <div className="conversation-explorer">
+      <div className="conversation-list">
+        <h2>Conversations</h2>
+        {loading && <div>Loading...</div>}
+        <ul>
+          {conversations.map(conv => (
+            <li 
+              key={conv.trace_id} 
+              onClick={() => setSelectedConversation(conv)}
+              className={selectedConversation?.trace_id === conv.trace_id ? 'selected' : ''}
+            >
+              <div className="summary">{conv.summary}</div>
+              <div className="timestamp">{new Date(conv.first_timestamp).toLocaleString()}</div>
+              <div className="metrics">
+                Messages: {conv.user_messages + conv.assistant_messages}, 
+                Tokens: {conv.total_tokens}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+      
+      <div className="conversation-details">
+        <h2>Conversation Details</h2>
+        {loading && <div>Loading...</div>}
+        {selectedConversation && (
+          <div className="conversation">
+            <div className="conversation-header">
+              <div>Agent: {selectedConversation.agent_name}</div>
+              <div>Started: {new Date(selectedConversation.first_timestamp).toLocaleString()}</div>
+              <div>Total Messages: {selectedConversation.user_messages + selectedConversation.assistant_messages}</div>
+            </div>
+            
+            <div className="messages">
+              {messages.map(message => (
+                <div 
+                  key={message.id} 
+                  className={`message ${message.role}`}
+                >
+                  <div className="message-header">
+                    <span className="role">{message.role}</span>
+                    <span className="model">{message.model}</span>
+                    <span className="timestamp">{new Date(message.timestamp).toLocaleTimeString()}</span>
+                  </div>
+                  <div className="content">{message.content}</div>
+                  <div className="metrics">
+                    Tokens: {message.role === 'user' ? message.input_tokens : message.output_tokens}, 
+                    Duration: {message.duration_ms}ms
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+```
+
 ### LLM Model Comparison Endpoint
 
 **Endpoint**: `GET /v1/metrics/llm/models`

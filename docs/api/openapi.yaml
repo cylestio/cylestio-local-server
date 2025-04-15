@@ -575,6 +575,202 @@ paths:
               schema:
                 $ref: '#/components/schemas/MetricResponse'
   
+  /v1/metrics/llm/usage_trends:
+    get:
+      summary: Get LLM usage trends over time
+      description: |
+        Get LLM usage trends over time with flexible time granularity.
+        
+        This endpoint provides a breakdown of LLM analytics by time buckets, 
+        showing trends in usage, performance, and costs over the specified period.
+      operationId: getLlmUsageTrends
+      tags:
+        - Metrics
+      parameters:
+        - name: agent_id
+          in: query
+          description: Filter by agent ID
+          required: false
+          schema:
+            type: string
+        - name: model_name
+          in: query
+          description: Filter by model name
+          required: false
+          schema:
+            type: string
+        - name: from_time
+          in: query
+          description: Start time (ISO format)
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: to_time
+          in: query
+          description: End time (ISO format)
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: granularity
+          in: query
+          description: Time granularity (minute, hour, day)
+          required: false
+          schema:
+            type: string
+            enum: [minute, hour, day]
+            default: day
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LLMMetricsBreakdownResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  
+  /v1/metrics/llm/agent_usage:
+    get:
+      summary: Get LLM usage by agent
+      description: |
+        Get LLM usage broken down by agent.
+        
+        This endpoint provides a breakdown of LLM analytics by agent,
+        showing which agents are using LLMs the most and their performance metrics.
+      operationId: getLlmAgentUsage
+      tags:
+        - Metrics
+      parameters:
+        - name: model_name
+          in: query
+          description: Filter by model name
+          required: false
+          schema:
+            type: string
+        - name: from_time
+          in: query
+          description: Start time (ISO format)
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: to_time
+          in: query
+          description: End time (ISO format)
+          required: false
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LLMMetricsBreakdownResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  
+  /v1/metrics/llm/agent_model_relationships:
+    get:
+      summary: Get agent-model relationship analytics
+      description: |
+        Get comprehensive analytics on agent-model relationships.
+        
+        This endpoint provides rich data about which agents used which models, when they were used,
+        and usage statistics. Results can be visualized as histograms, trends, and other charts.
+        
+        The response includes:
+        - For each agent, what models it used
+        - When the models were used (with time granularity)
+        - Usage metrics (request count, tokens, cost, etc.)
+        - Optional time and token distributions for histograms
+      operationId: getAgentModelRelationships
+      tags:
+        - Metrics
+      parameters:
+        - name: agent_id
+          in: query
+          description: Filter by agent ID
+          required: false
+          schema:
+            type: string
+        - name: model_name
+          in: query
+          description: Filter by model name
+          required: false
+          schema:
+            type: string
+        - name: from_time
+          in: query
+          description: Start time in ISO format
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: to_time
+          in: query
+          description: End time in ISO format
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: granularity
+          in: query
+          description: Time granularity (minute, hour, day)
+          required: false
+          schema:
+            $ref: '#/components/schemas/TimeGranularity'
+            default: day
+        - name: include_distributions
+          in: query
+          description: Whether to include time and token distributions
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LLMMetricsBreakdownResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  
   /v1/agents:
     get:
       summary: List Agents
@@ -1270,4 +1466,153 @@ components:
           type: string
           description: Agent ID from the associated event
           nullable: true
-          example: "agent789" 
+          example: "agent789"
+
+    TimeGranularity:
+      type: string
+      description: Time granularity options for LLM metrics
+      enum:
+        - minute
+        - hour
+        - day
+      example: "day"
+    
+    LLMMetricsFilter:
+      type: object
+      properties:
+        agent_id:
+          type: string
+          description: Filter by agent ID
+          example: "weather-agent"
+        model_name:
+          type: string
+          description: Filter by model name
+          example: "gpt-4"
+        from_time:
+          type: string
+          format: date-time
+          description: Start time (ISO format)
+          example: "2023-09-01T00:00:00Z"
+        to_time:
+          type: string
+          format: date-time
+          description: End time (ISO format)
+          example: "2023-09-30T23:59:59Z"
+        granularity:
+          $ref: '#/components/schemas/TimeGranularity'
+    
+    LLMMetricsBreakdown:
+      type: string
+      description: Breakdown options for LLM metrics
+      enum:
+        - none
+        - agent
+        - model
+        - time
+      example: "time"
+      
+    LLMMetricsResponse:
+      type: object
+      properties:
+        request_count:
+          type: integer
+          description: Total number of LLM requests
+          example: 850
+        response_time_avg:
+          type: number
+          format: float
+          description: Average response time in ms
+          example: 2140.2
+        response_time_p95:
+          type: number
+          format: float
+          description: 95th percentile response time in ms
+          example: 4125.7
+        success_rate:
+          type: number
+          format: float
+          description: Success rate (0-1)
+          example: 0.99
+        error_rate:
+          type: number
+          format: float
+          description: Error rate (0-1)
+          example: 0.01
+        token_count_input:
+          type: integer
+          description: Total input tokens
+          example: 84500
+        token_count_output:
+          type: integer
+          description: Total output tokens
+          example: 47890
+        token_count_total:
+          type: integer
+          description: Total tokens
+          example: 132390
+        estimated_cost_usd:
+          type: number
+          format: float
+          description: Estimated cost in USD
+          example: 3.31
+        first_seen:
+          type: string
+          format: date-time
+          description: First seen timestamp
+          example: "2023-09-01T00:00:00Z"
+        last_seen:
+          type: string
+          format: date-time
+          description: Last seen timestamp
+          example: "2023-09-30T23:59:59Z"
+    
+    LLMMetricsBreakdownItem:
+      type: object
+      properties:
+        key:
+          type: string
+          description: Breakdown key (agent ID, model name, or timestamp)
+          example: "2023-09-01T12:00:00Z"
+        metrics:
+          $ref: '#/components/schemas/LLMMetricsResponse'
+        relation_type:
+          type: string
+          description: For agent-model relationships, specifies the type (primary, fallback, etc.)
+          example: "primary"
+        time_distribution:
+          type: array
+          description: Optional time-based distribution data for histograms
+          items:
+            type: object
+            additionalProperties: true
+        token_distribution:
+          type: array
+          description: Optional token count distribution data for histograms
+          items:
+            type: object
+            additionalProperties: true
+    
+    LLMMetricsBreakdownResponse:
+      type: object
+      properties:
+        total:
+          $ref: '#/components/schemas/LLMMetricsResponse'
+        breakdown:
+          type: array
+          description: Breakdown items
+          items:
+            $ref: '#/components/schemas/LLMMetricsBreakdownItem'
+        from_time:
+          type: string
+          format: date-time
+          description: Query start time
+          example: "2023-09-01T00:00:00Z"
+        to_time:
+          type: string
+          format: date-time
+          description: Query end time
+          example: "2023-09-30T23:59:59Z"
+        filters:
+          $ref: '#/components/schemas/LLMMetricsFilter'
+        breakdown_by:
+          $ref: '#/components/schemas/LLMMetricsBreakdown' 

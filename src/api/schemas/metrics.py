@@ -195,4 +195,100 @@ class LLMMetricsBreakdownResponse(BaseModel):
     from_time: datetime = Field(..., description="Query start time")
     to_time: datetime = Field(..., description="Query end time")
     filters: LLMMetricsFilter = Field(..., description="Applied filters")
-    breakdown_by: LLMMetricsBreakdown = Field(..., description="Breakdown dimension") 
+    breakdown_by: LLMMetricsBreakdown = Field(..., description="Breakdown dimension")
+
+# New schemas for LLM Explorer UI
+
+class ConversationSummary(BaseModel):
+    """Schema for conversation summary in list view"""
+    trace_id: str = Field(..., description="Trace ID that identifies the conversation")
+    first_timestamp: datetime = Field(..., description="Timestamp of first message in conversation")
+    last_timestamp: datetime = Field(..., description="Timestamp of last message in conversation")
+    agent_id: str = Field(..., description="Agent ID")
+    agent_name: str = Field(..., description="Agent name")
+    model: Optional[str] = Field(None, description="Primary model used in conversation")
+    request_count: int = Field(..., description="Number of requests in conversation")
+    total_tokens: int = Field(0, description="Total token usage")
+    status: str = Field(..., description="Conversation status: success, error, or mixed")
+    duration_ms: int = Field(0, description="Total duration of conversation")
+    user_messages: int = Field(0, description="Count of user messages")
+    assistant_messages: int = Field(0, description="Count of assistant messages")
+
+
+class ConversationListResponse(BaseModel):
+    """Schema for list of conversations"""
+    items: List[ConversationSummary] = Field(..., description="List of conversations")
+    pagination: Dict[str, Any] = Field(..., description="Pagination information")
+
+
+class ConversationMessage(BaseModel):
+    """Schema for a message in a conversation"""
+    id: str = Field(..., description="Unique message ID")
+    timestamp: datetime = Field(..., description="Message timestamp")
+    trace_id: str = Field(..., description="Trace ID")
+    span_id: str = Field(..., description="Span ID")
+    model: Optional[str] = Field(None, description="Model used for this message")
+    role: str = Field(..., description="Message role: user, assistant, or system")
+    message_type: str = Field("unknown", description="Message type: request or response")
+    status: str = Field(..., description="Message status")
+    duration_ms: Optional[int] = Field(None, description="Processing duration in ms")
+    input_tokens: Optional[int] = Field(None, description="Input token count")
+    output_tokens: Optional[int] = Field(None, description="Output token count")
+    content: str = Field(..., description="Message content")
+    parent_id: Optional[str] = Field(None, description="ID of parent message")
+    agent_id: str = Field(..., description="Agent ID")
+    agent_name: str = Field(..., description="Agent name")
+
+
+class ConversationDetailResponse(BaseModel):
+    """Schema for conversation detail with messages"""
+    items: List[ConversationMessage] = Field(..., description="Messages in the conversation")
+    pagination: Dict[str, Any] = Field(..., description="Pagination information")
+
+
+class ConversationSearchParams(BaseModel):
+    """Schema for conversation search parameters"""
+    query: Optional[str] = Field(None, description="Full-text search across conversation content")
+    agent_id: Optional[str] = Field(None, description="Filter by agent")
+    status: Optional[str] = Field(None, description="Filter by conversation status")
+    from_time: Optional[datetime] = Field(None, description="Start time filter")
+    to_time: Optional[datetime] = Field(None, description="End time filter")
+    token_min: Optional[int] = Field(None, description="Minimum token count filter")
+    token_max: Optional[int] = Field(None, description="Maximum token count filter")
+    has_error: Optional[bool] = Field(None, description="Filter for conversations with errors")
+    page: int = Field(1, description="Page number")
+    page_size: int = Field(20, description="Items per page")
+    
+    @validator('to_time')
+    def validate_time_range(cls, to_time, values):
+        from_time = values.get('from_time')
+        
+        if (from_time is None and to_time is not None) or (from_time is not None and to_time is None):
+            raise ValueError("Both from_time and to_time must be provided together")
+            
+        if from_time is not None and to_time is not None and from_time >= to_time:
+            raise ValueError("from_time must be before to_time")
+            
+        return to_time
+
+# Update existing LLMInteraction schema to include agent info
+class LLMRequestDetail(BaseModel):
+    """Enhanced schema for LLM request details"""
+    id: str = Field(..., description="Request ID")
+    timestamp: datetime = Field(..., description="Request timestamp")
+    trace_id: str = Field(..., description="Trace ID")
+    span_id: str = Field(..., description="Span ID")
+    model: str = Field(..., description="Model name")
+    status: str = Field(..., description="Request status")
+    duration_ms: Optional[int] = Field(None, description="Processing duration in ms")
+    input_tokens: Optional[int] = Field(None, description="Input token count")
+    output_tokens: Optional[int] = Field(None, description="Output token count")
+    agent_id: str = Field(..., description="Agent ID")
+    agent_name: str = Field(..., description="Agent name")
+    content: Optional[str] = Field(None, description="Request content")
+    response: Optional[str] = Field(None, description="Response content")
+    
+class LLMRequestListResponse(BaseModel):
+    """Schema for list of LLM requests"""
+    items: List[LLMRequestDetail] = Field(..., description="List of LLM requests")
+    pagination: Dict[str, Any] = Field(..., description="Pagination information") 

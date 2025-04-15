@@ -12,7 +12,14 @@ from src.database.session import get_db
 from src.api.schemas.metrics import (
     MetricResponse, DashboardResponse, ToolInteractionListResponse,
     LLMMetricsFilter, LLMMetricsBreakdownResponse, LLMMetricsBreakdown,
-    LLMMetricsBreakdownItem, TimeGranularity, TimeRange
+    LLMMetricsBreakdownItem, TimeGranularity, TimeRange,
+    ConversationSummary, 
+    ConversationListResponse, 
+    ConversationMessage, 
+    ConversationDetailResponse,
+    ConversationSearchParams,
+    LLMRequestDetail,
+    LLMRequestListResponse
 )
 from src.analysis.interface import (
     MetricQuery, TimeRangeParams, TimeSeriesParams, TimeResolution, MetricParams,
@@ -1870,4 +1877,224 @@ async def get_tool_success_rate_detailed(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving detailed tool success rate metrics: {str(e)}"
+        )
+
+@router.get(
+    "/metrics/llm/requests",
+    response_model=LLMRequestListResponse,
+    summary="Get LLM requests with agent information"
+)
+async def get_llm_requests(
+    agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
+    model: Optional[str] = Query(None, description="Filter by model"),
+    from_time: Optional[datetime] = Query(None, description="Start time (ISO format)"),
+    to_time: Optional[datetime] = Query(None, description="End time (ISO format)"),
+    page: int = Query(1, description="Page number"),
+    page_size: int = Query(20, description="Items per page"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get a list of LLM requests with agent information included.
+    
+    This endpoint returns all LLM requests with detailed information including:
+    - Basic request properties (ID, timestamp, duration, tokens)
+    - Agent information (ID, name)
+    - Model information
+    - Request status
+    
+    Results can be filtered by agent_id, model, and time range.
+    """
+    logger.info(f"Getting LLM requests with agent info. Agent: {agent_id}, Model: {model}")
+    
+    # Local import to avoid circular dependency
+    from src.services.conversation_service import get_conversation_service
+    conversation_service = get_conversation_service(db)
+    
+    try:
+        requests, pagination = conversation_service.get_llm_requests(
+            agent_id=agent_id,
+            model=model,
+            from_time=from_time,
+            to_time=to_time,
+            page=page,
+            page_size=page_size
+        )
+        
+        return LLMRequestListResponse(
+            items=requests,
+            pagination=pagination
+        )
+        
+    except Exception as e:
+        logger.error(f"Error getting LLM requests: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error retrieving LLM requests: {str(e)}"
+        )
+
+@router.get(
+    "/metrics/llm/requests/{request_id}",
+    response_model=LLMRequestDetail,
+    summary="Get detailed information about a specific LLM request"
+)
+async def get_llm_request_details(
+    request_id: str = Path(..., description="Request ID in format '{event_id}_{interaction_id}'"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get detailed information about a specific LLM request.
+    
+    This endpoint returns all available information about a specific LLM request, including:
+    - Request properties (ID, timestamp, duration, tokens)
+    - Agent information (ID, name)
+    - Model information
+    - Full request and response content
+    - Status and error information if applicable
+    """
+    logger.info(f"Getting LLM request details for request_id: {request_id}")
+    
+    # Local import to avoid circular dependency
+    from src.services.conversation_service import get_conversation_service
+    conversation_service = get_conversation_service(db)
+    
+    try:
+        request_details = conversation_service.get_request_details(request_id)
+        
+        if not request_details:
+            raise HTTPException(
+                status_code=404,
+                detail=f"LLM request with ID {request_id} not found"
+            )
+            
+        return request_details
+        
+    except ValueError as e:
+        logger.error(f"Invalid request ID format: {str(e)}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid request ID format: {str(e)}"
+        )
+    except Exception as e:
+        logger.error(f"Error getting LLM request details: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error retrieving LLM request details: {str(e)}"
+        )
+
+@router.get(
+    "/metrics/llm/conversations",
+    response_model=ConversationListResponse,
+    summary="Get list of LLM conversations"
+)
+async def get_llm_conversations(
+    query: Optional[str] = Query(None, description="Full-text search across conversation content"),
+    agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
+    status: Optional[str] = Query(None, description="Filter by status (success, error, mixed)"),
+    from_time: Optional[datetime] = Query(None, description="Start time (ISO format)"),
+    to_time: Optional[datetime] = Query(None, description="End time (ISO format)"),
+    token_min: Optional[int] = Query(None, description="Minimum token count"),
+    token_max: Optional[int] = Query(None, description="Maximum token count"),
+    has_error: Optional[bool] = Query(None, description="Filter for conversations with errors"),
+    page: int = Query(1, description="Page number"),
+    page_size: int = Query(20, description="Items per page"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get a list of LLM conversations with metadata and summary.
+    
+    This endpoint returns conversations (grouped requests with the same trace_id) with
+    metadata including timestamps, agent information, request counts, and a summary
+    derived from the first user message.
+    
+    Results can be filtered using a variety of criteria and support full-text search
+    across conversation content.
+    """
+    logger.info("Getting LLM conversations list")
+    
+    # Create search parameters object
+    search_params = ConversationSearchParams(
+        query=query,
+        agent_id=agent_id,
+        status=status,
+        from_time=from_time,
+        to_time=to_time,
+        token_min=token_min,
+        token_max=token_max,
+        has_error=has_error,
+        page=page,
+        page_size=page_size
+    )
+    
+    # Local import to avoid circular dependency
+    from src.services.conversation_service import get_conversation_service
+    conversation_service = get_conversation_service(db)
+    
+    try:
+        conversations, pagination = conversation_service.get_conversations(search_params)
+        
+        return ConversationListResponse(
+            items=conversations,
+            pagination=pagination
+        )
+        
+    except Exception as e:
+        logger.error(f"Error getting LLM conversations: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error retrieving LLM conversations: {str(e)}"
+        )
+
+@router.get(
+    "/metrics/llm/conversations/{trace_id}",
+    response_model=ConversationDetailResponse,
+    summary="Get detailed conversation messages"
+)
+async def get_llm_conversation_detail(
+    trace_id: str = Path(..., description="Trace ID of the conversation"),
+    page: int = Query(1, description="Page number"),
+    page_size: int = Query(50, description="Items per page"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get detailed messages for a specific conversation.
+    
+    This endpoint returns all messages in a conversation, identified by trace_id,
+    in chronological order. It includes:
+    - Full message content for user and assistant messages
+    - Message metadata (timestamps, tokens, etc.)
+    - Agent information
+    - Status and other properties
+    
+    For very long conversations, the results are paginated.
+    """
+    logger.info(f"Getting conversation detail for trace_id: {trace_id}")
+    
+    # Local import to avoid circular dependency
+    from src.services.conversation_service import get_conversation_service
+    conversation_service = get_conversation_service(db)
+    
+    try:
+        messages, pagination = conversation_service.get_conversation_messages(
+            trace_id=trace_id,
+            page=page,
+            page_size=page_size
+        )
+        
+        if not messages and page == 1:
+            # No messages found and we're on the first page
+            raise HTTPException(
+                status_code=404,
+                detail=f"Conversation with trace_id {trace_id} not found"
+            )
+            
+        return ConversationDetailResponse(
+            items=messages,
+            pagination=pagination
+        )
+        
+    except Exception as e:
+        logger.error(f"Error getting conversation detail: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error retrieving conversation detail: {str(e)}"
         )

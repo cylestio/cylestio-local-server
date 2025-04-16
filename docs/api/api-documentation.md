@@ -52,12 +52,15 @@ Endpoints for retrieving security-related information:
 - `GET /v1/security/alerts` - Get security alerts with filtering options
 - `GET /v1/security/alerts/count` - Get security alerts count
 - `GET /v1/security/alerts/timeseries` - Get security alerts time series data
+- `GET /v1/security/alerts/{alert_id}` - Get detailed information about a specific security alert
+- `GET /v1/security/alerts/{alert_id}/triggers` - Get triggered event IDs for a specific security alert
 
 These endpoints provide comprehensive security monitoring capabilities, including:
 - Alert filtering by severity, type, and agent
 - Time-based alert analysis
 - Alert count and trend analysis
 - Detailed alert information
+- Traceability between alerts and triggering events
 
 See [Security Endpoints Guide](./security-endpoints-guide.md) for detailed documentation.
 

@@ -1049,6 +1049,61 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  
+  /v1/security/alerts/{alert_id}/triggers:
+    get:
+      summary: Get Security Alert Triggers
+      description: Retrieves the triggered event IDs for a specific security alert
+      operationId: getSecurityAlertTriggers
+      tags:
+        - Security
+      parameters:
+        - name: alert_id
+          in: path
+          description: ID of the security alert
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  alert_id:
+                    type: integer
+                    example: 14
+                  triggered_event_ids:
+                    type: array
+                    items:
+                      type: integer
+                    example: [1411, 1412]
+                  count:
+                    type: integer
+                    example: 2
+        '404':
+          description: Security alert not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+                    example: "Security alert with ID 999 not found"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+                    example: "Error retrieving triggered events: Database error"
 
 components:
   parameters:

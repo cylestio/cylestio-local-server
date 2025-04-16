@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException, status, Path
 from sqlalchemy.orm import Session
 
 from src.database.session import get_db
-from src.models.security_alert import SecurityAlert
+from src.models.security_alert import SecurityAlert, SecurityAlertTrigger
 from src.services.security_query import SecurityQueryService
 from src.analysis.security_analysis import format_alert_for_response, get_security_overview
 from src.utils.logging import get_logger
@@ -430,4 +430,58 @@ async def get_security_alert_details(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving security alert details: {str(e)}"
+        )
+
+
+@router.get(
+    "/alerts/{alert_id}/triggers",
+    response_model=Dict[str, Any],
+    summary="Get triggered events for a specific security alert"
+)
+async def get_security_alert_triggers(
+    alert_id: int = Path(..., description="Security alert ID", ge=1),
+    db: Session = Depends(get_db)
+):
+    """
+    Get the triggered event IDs for a specific security alert.
+    
+    This endpoint returns the IDs of events that triggered the specified security alert,
+    allowing for traceability between alerts and underlying events.
+    
+    Returns:
+        Dict[str, Any]: Dictionary containing triggered event information
+    """
+    logger.info(f"Getting triggered events for security alert {alert_id}")
+    
+    try:
+        # Query alert to verify it exists
+        alert = db.query(SecurityAlert).filter(SecurityAlert.id == alert_id).first()
+        if not alert:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Security alert with ID {alert_id} not found"
+            )
+        
+        # Query triggers for this alert
+        triggers = db.query(SecurityAlertTrigger).filter(
+            SecurityAlertTrigger.alert_id == alert_id
+        ).all()
+        
+        # Extract triggered event IDs
+        triggered_event_ids = [trigger.triggering_event_id for trigger in triggers]
+        
+        # Prepare response
+        response = {
+            "alert_id": alert_id,
+            "triggered_event_ids": triggered_event_ids,
+            "count": len(triggered_event_ids)
+        }
+        
+        return response
+    
+    except Exception as e:
+        logger.error(f"Error getting triggered events for security alert {alert_id}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving triggered events: {str(e)}"
         ) 

@@ -220,6 +220,23 @@ Retrieves detailed information about a specific security alert, including relate
 }
 ```
 
+### Get Security Alert Triggers
+Retrieves the triggered event IDs for a specific security alert.
+
+**Endpoint:** `GET /v1/security/alerts/{alert_id}/triggers`
+
+**Path Parameters:**
+- `alert_id` (required): The ID of the security alert
+
+**Response Format:**
+```json
+{
+    "alert_id": 14,
+    "triggered_event_ids": [1411, 1412],
+    "count": 2
+}
+```
+
 ## Error Responses
 
 All endpoints may return the following error responses:

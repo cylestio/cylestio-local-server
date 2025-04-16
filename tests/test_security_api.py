@@ -210,14 +210,56 @@ def test_get_security_alert_details(mock_security_alerts):
 
 
 def test_get_nonexistent_alert():
-    """Test that requesting a nonexistent alert returns a 404 error."""
-    # Patch the database to return None for the alert
+    """Test that requesting a non-existent alert returns a 404 error."""
     with patch('src.database.session.get_db'), \
          patch('sqlalchemy.orm.query.Query.filter'), \
          patch('sqlalchemy.orm.query.Query.first', return_value=None):
+        response = client.get("/v1/alerts/99999")
+    
+    # Check the response
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"]
+
+
+def test_get_security_alert_triggers(mock_security_alerts):
+    """Test the GET /v1/alerts/{alert_id}/triggers endpoint."""
+    # Create a mock triggers list
+    mock_triggers = [
+        MagicMock(triggering_event_id=101),
+        MagicMock(triggering_event_id=102),
+        MagicMock(triggering_event_id=103)
+    ]
+    
+    # Patch the necessary functions and queries
+    with patch('src.database.session.get_db'), \
+         patch('sqlalchemy.orm.query.Query.filter'), \
+         patch('sqlalchemy.orm.query.Query.first', return_value=mock_security_alerts[0]), \
+         patch('sqlalchemy.orm.query.Query.all', return_value=mock_triggers):
             
-        # Use a high numeric ID that won't conflict
-        response = client.get("/v1/alerts/54321")
+        response = client.get("/v1/alerts/12345/triggers")
+    
+    # Check the response
+    assert response.status_code == 200
+    data = response.json()
+    
+    # Verify response structure
+    assert "alert_id" in data
+    assert "triggered_event_ids" in data
+    assert "count" in data
+    
+    # Verify the contents
+    assert data["alert_id"] == 12345
+    assert len(data["triggered_event_ids"]) == 3
+    assert data["triggered_event_ids"] == [101, 102, 103]
+    assert data["count"] == 3
+
+
+def test_get_nonexistent_alert_triggers():
+    """Test that requesting triggers for a non-existent alert returns a 404 error."""
+    with patch('src.database.session.get_db'), \
+         patch('sqlalchemy.orm.query.Query.filter'), \
+         patch('sqlalchemy.orm.query.Query.first', return_value=None):
+        response = client.get("/v1/alerts/99999/triggers")
     
     # Check the response
     assert response.status_code == 404

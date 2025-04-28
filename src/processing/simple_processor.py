@@ -621,14 +621,61 @@ class SimpleProcessor:
             db_session: SQLAlchemy session
         """
         from src.models.session import Session
+        from src.models.agent import Agent
         
         # Check if session ID is available in attributes
         session_id = attributes.get('session.id')
         if not session_id:
             return
         
-        # IMPORTANT: Use the string agent_id, not the numeric id
-        agent_id = event.agent_id  # This is the string identifier like "chatbot-agent"
+        # Determine the correct agent_id for this session
+        # IMPORTANT: Don't blindly use event.agent_id as it might be "unknown-agent"
+        # Instead, try to determine the real agent this session belongs to
+        
+        agent_id = event.agent_id  # Default, but we'll try to find a better one
+        
+        # Look for better agent identifiers in the attributes
+        if 'agent.id' in attributes:
+            agent_id = attributes['agent.id']
+        elif 'agent.name' in attributes:
+            agent_id = attributes['agent.name']
+        elif 'application.name' in attributes and attributes['application.name']:
+            agent_id = attributes['application.name']
+        
+        # If event.name contains a known agent pattern, use that
+        event_name = event.name or ""
+        known_agents = ['weather-agent', 'chatbot-agent', 'rag-agent']
+        for known_agent in known_agents:
+            if known_agent in event_name:
+                agent_id = known_agent
+                break
+            
+        # If we're still using unknown-agent, try one last method with raw_data if available
+        if agent_id == "unknown-agent" and event.raw_data:
+            raw_data = event.raw_data
+            if isinstance(raw_data, dict):
+                # Check for signals in raw_data
+                raw_name = raw_data.get('name', '')
+                for known_agent in known_agents:
+                    if known_agent in raw_name:
+                        agent_id = known_agent
+                        break
+        
+        # Ensure this agent exists in the DB
+        agent = db_session.query(Agent).filter(Agent.agent_id == agent_id).first()
+        if not agent:
+            # Create the agent if it doesn't exist
+            current_time = datetime.utcnow()
+            agent = Agent(
+                agent_id=agent_id,
+                name=agent_id,
+                first_seen=current_time,
+                last_seen=current_time,
+                is_active=True
+            )
+            db_session.add(agent)
+            db_session.flush()
+            logger.debug(f"Created new agent: {agent_id}")
         
         # Debug log to help diagnose issues
         logger.debug(f"Creating/updating session {session_id} for agent {agent_id}")
@@ -639,11 +686,11 @@ class SimpleProcessor:
             session = db_session.query(Session).filter(Session.session_id == session_id).first()
             
             if not session:
-                # Create it with the string agent_id
+                # Create it with the agent_id we determined
                 current_time = datetime.utcnow()
                 session = Session(
                     session_id=session_id,
-                    agent_id=agent_id,  # String ID, not numeric
+                    agent_id=agent_id,
                     start_timestamp=current_time,
                     end_timestamp=current_time  # Initialize with same time
                 )
@@ -675,20 +722,8 @@ class SimpleProcessor:
                 session.end_timestamp = event_timestamp
                 db_session.add(session)
             
-            # Add validation to ensure start_timestamp <= end_timestamp
-            if session.start_timestamp and session.end_timestamp and session.start_timestamp > session.end_timestamp:
-                logger.warning(f"Session timestamp inversion detected for session {session_id}. Fixing...")
-                # Fix by setting both to the same value (the latest timestamp available)
-                latest_timestamp = max(session.start_timestamp, session.end_timestamp)
-                session.start_timestamp = latest_timestamp
-                session.end_timestamp = latest_timestamp
-                db_session.add(session)
-                
         except Exception as e:
-            # Log the error but continue processing
-            logger.error(f"Error processing session info: {str(e)}")
-            logger.debug(f"Session ID: {session_id}, Agent ID: {agent_id}")
-            logger.exception(e)
+            logger.error(f"Error processing session information: {str(e)}", exc_info=True)
     
     def _fix_timestamps(self, event: Event, llm_interaction: LLMInteraction, db_session: Session) -> None:
         """
@@ -959,7 +994,7 @@ class SimpleProcessor:
                 current_time = datetime.utcnow()
                 agent = Agent(
                     agent_id=agent_id,  # This is the string identifier that will be referenced
-                    name=f"Agent-{agent_id[:8]}",  # Generate a simple name from ID
+                    name=agent_id,  # Use agent_id as the name for consistency
                     first_seen=current_time,
                     last_seen=current_time,
                     is_active=True
@@ -970,6 +1005,9 @@ class SimpleProcessor:
             else:
                 # Update last_seen time
                 agent.last_seen = datetime.utcnow()
+                # Ensure name matches agent_id for consistency
+                if agent.name != agent_id:
+                    agent.name = agent_id
                 db_session.add(agent)
                 logger.debug(f"Using existing agent with agent_id={agent_id}, db id={agent.id}")
         except Exception as e:

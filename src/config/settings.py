@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_PER_MINUTE: int = Field(100, env="RATE_LIMIT_PER_MINUTE")
     
     # Logging settings
-    LOG_LEVEL: str = Field("INFO", env="LOG_LEVEL")
+    LOG_LEVEL: str = Field("DEBUG", env="LOG_LEVEL")
     
     class Config:
         env_file = ".env"

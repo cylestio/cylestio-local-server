@@ -520,6 +520,9 @@ def get_agent_llm_usage(
     
     llm_usage = query.all()
     
+    # Import pricing service
+    from src.services.pricing_service import pricing_service
+    
     # Prepare result items
     items = []
     total_requests = 0
@@ -534,21 +537,9 @@ def get_agent_llm_usage(
         output_tokens = usage.output_tokens or 0
         total_tokens_model = input_tokens + output_tokens
         
-        # Calculate estimated cost
-        # This is a simplified cost calculation - in a real implementation you would
-        # use accurate pricing for specific models and vendors
-        cost_per_1k_input = 0.0
-        cost_per_1k_output = 0.0
-        
-        if "gpt-4" in model.lower():
-            cost_per_1k_input = 0.03
-            cost_per_1k_output = 0.06
-        elif "gpt-3.5" in model.lower():
-            cost_per_1k_input = 0.0015
-            cost_per_1k_output = 0.002
-        
-        estimated_cost = (input_tokens / 1000.0 * cost_per_1k_input) + \
-                         (output_tokens / 1000.0 * cost_per_1k_output)
+        # Calculate cost using pricing_service instead of hardcoded values
+        cost_result = pricing_service.calculate_cost(input_tokens, output_tokens, model, vendor)
+        estimated_cost = cost_result["total_cost"]
         
         items.append({
             "model": model,

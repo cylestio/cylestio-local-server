@@ -30,9 +30,13 @@ class TelemetryEventBase(BaseModel):
         """
         Validate agent_id field.
         If agent_id is not provided, attempt to extract it from:
-        1. session.id in attributes (for framework events)
-        2. host.name in attributes
-        3. Default to "unknown-agent" as fallback
+        1. agent.id in attributes (direct identifier)
+        2. agent.name in attributes (some frameworks use this)
+        3. application.name in attributes (could identify the agent)
+        4. host.name in attributes (only if it follows a known pattern)
+        5. Default to "unknown-agent" as fallback
+        
+        Note: session.id should NOT be used as an agent_id since it identifies a session, not an agent.
         """
         if v:
             return v
@@ -40,15 +44,30 @@ class TelemetryEventBase(BaseModel):
         # Try to extract from attributes if available
         attributes = values.get('attributes', {})
         
-        # Check for session.id in attributes (common for framework events)
-        if 'session.id' in attributes:
-            return attributes['session.id']
+        # First priority: Try to get explicit agent identifiers
+        if 'agent.id' in attributes:
+            return attributes['agent.id']
             
-        # Check for host.name in attributes
+        if 'agent.name' in attributes:
+            return attributes['agent.name']
+            
+        if 'application.name' in attributes and attributes['application.name']:
+            return attributes['application.name']
+            
+        # Second priority: Check for known agent patterns in host.name
         if 'host.name' in attributes:
-            return attributes['host.name']
+            host_name = attributes['host.name']
+            # If host.name contains known agent names, extract them
+            known_agents = ['weather-agent', 'chatbot-agent', 'rag-agent']
+            for agent in known_agents:
+                if agent in host_name:
+                    return agent
             
-        # Generate a default agent_id
+            # Otherwise use the host name (but not if it's a generic computer name)
+            if not any(x in host_name.lower() for x in ['macbook', 'laptop', 'desktop', 'pc-', 'computer']):
+                return host_name
+        
+        # Last resort: generic unknown agent
         return "unknown-agent"
     
     @validator('trace_id', pre=True)

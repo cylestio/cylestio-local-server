@@ -81,8 +81,8 @@ def test_security_event_processing(sample_security_event):
     assert isinstance(security_alert.keywords, list)
     assert "credit_card:****1234" in security_alert.keywords
     
-    # Verify that both objects were added to the session
-    assert mock_db.add.call_count == 2
+    # Verify that objects were added to the session (agent, event, security_alert)
+    assert mock_db.add.call_count == 3
 
 
 @pytest.fixture

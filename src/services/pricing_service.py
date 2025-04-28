@@ -12,6 +12,7 @@ import logging
 from typing import Dict, Any, Optional, Tuple
 from datetime import datetime
 from functools import lru_cache
+import re
 
 # Setup logger
 logger = logging.getLogger(__name__)
@@ -170,6 +171,8 @@ class PricingService:
         clean_model = model.lower().strip()
         vendor_key = vendor.lower().strip() if vendor else None
         
+        logger.info(f"Looking up pricing for model '{model}' (vendor: {vendor})")
+        
         # Try all possible key combinations
         possible_keys = []
         
@@ -191,6 +194,20 @@ class PricingService:
         possible_keys.append(clean_model.replace('-', ' '))
         possible_keys.append(clean_model.replace(' ', '-'))
         
+        # 3. Handle versioned models with date suffixes like claude-3-haiku-20240307
+        # Strip version suffix (typically date in format YYYYMMDD at the end)
+        base_model_match = re.match(r'^(claude-3(?:\.5)?-(?:haiku|sonnet|opus))(?:-.+)?$', clean_model)
+        if base_model_match:
+            base_model = base_model_match.group(1)
+            logger.info(f"Extracted base model: '{base_model}' from '{clean_model}'")
+            if base_model != clean_model:  # Only if there was a match and stripping occurred
+                possible_keys.append(base_model)
+                if vendor_key:
+                    possible_keys.append(f"{vendor_key}-{base_model}")
+                # Also try with space/dash variations
+                possible_keys.append(base_model.replace('-', ' '))
+                possible_keys.append(base_model.replace(' ', '-'))
+        
         # Special case handling for common models
         model_mappings = {
             'gpt-3.5-turbo': ['gpt-3.5 turbo', 'gpt-3.5'],
@@ -211,11 +228,14 @@ class PricingService:
                     if vendor_key:
                         possible_keys.append(f"{vendor_key}-{variant}")
         
+        logger.info(f"Trying possible keys: {possible_keys}")
+        logger.info(f"Available pricing keys: {list(self._pricing_data.keys())[:10]} (showing first 10)")
+        
         # Try each key and return the first match
         for key in possible_keys:
             if key in self._pricing_data:
                 price_data = self._pricing_data[key]
-                logger.debug(f"Found pricing for {model}: input=${price_data['input_price']}, output=${price_data['output_price']}")
+                logger.info(f"Found pricing for {model}: input=${price_data['input_price']}, output=${price_data['output_price']}")
                 return price_data['input_price'], price_data['output_price']
         
         # Log warning and return default values if no match found

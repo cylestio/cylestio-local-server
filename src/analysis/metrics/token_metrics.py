@@ -135,7 +135,8 @@ class TokenMetrics(AnalysisInterface):
         return {
             'total_input_tokens': result.total_input_tokens or 0,
             'total_output_tokens': result.total_output_tokens or 0,
-            'total_tokens': result.total_tokens or 0,
+            'total_tokens': (result.total_tokens or 0) if (result.total_tokens or 0) > 0 
+                else (result.total_input_tokens or 0) + (result.total_output_tokens or 0),
             'avg_input_tokens': round(result.avg_input_tokens or 0, 2),
             'avg_output_tokens': round(result.avg_output_tokens or 0, 2),
             'avg_tokens': round(result.avg_tokens or 0, 2),
@@ -231,11 +232,14 @@ class TokenMetrics(AnalysisInterface):
                 'default'  # Use default pricing
             )
             
+            # Calculate total tokens in case the stored value is zero but input/output are not
+            total_tokens = (result.total_tokens or 0) if (result.total_tokens or 0) > 0 else (result.input_tokens or 0) + (result.output_tokens or 0)
+            
             items.append({
                 'agent_id': result.agent_id,
                 'input_tokens': result.input_tokens,
                 'output_tokens': result.output_tokens,
-                'total_tokens': result.total_tokens,
+                'total_tokens': total_tokens,
                 'interaction_count': result.interaction_count,
                 'estimated_cost': round(cost, 2)
             })
@@ -449,7 +453,8 @@ class TokenMetrics(AnalysisInterface):
                 'model': result.model,
                 'input_tokens': result.input_tokens or 0,
                 'output_tokens': result.output_tokens or 0,
-                'total_tokens': result.total_tokens or 0,
+                'total_tokens': (result.total_tokens or 0) if (result.total_tokens or 0) > 0 
+                    else (result.input_tokens or 0) + (result.output_tokens or 0),
                 'interaction_count': result.interaction_count or 0
             })
         
@@ -495,10 +500,20 @@ class TokenMetrics(AnalysisInterface):
         # Execute the query
         results = query.all()
         
+        # Calculate total tokens where necessary
+        recalculated_total_tokens = []
+        for r in results:
+            if r.total_tokens is None or r.total_tokens == 0:
+                if r.input_tokens is not None and r.output_tokens is not None:
+                    recalculated_total_tokens.append(r.input_tokens + r.output_tokens)
+            else:
+                recalculated_total_tokens.append(r.total_tokens)
+
         # Extract token values
         input_tokens = [r.input_tokens for r in results if r.input_tokens is not None]
         output_tokens = [r.output_tokens for r in results if r.output_tokens is not None]
-        total_tokens = [r.total_tokens for r in results if r.total_tokens is not None]
+        # Use the recalculated total tokens instead of the raw database values
+        total_tokens = recalculated_total_tokens
         
         # Define percentiles to calculate
         percentiles = [50, 75, 90, 95, 99]

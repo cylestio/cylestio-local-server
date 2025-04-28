@@ -258,7 +258,8 @@ class LLMAnalytics(AnalysisInterface):
                 error_rate=error_rate,
                 token_count_input=result.token_count_input or 0,
                 token_count_output=result.token_count_output or 0,
-                token_count_total=result.token_count_total or 0,
+                token_count_total=(result.token_count_total or 0) if (result.token_count_total or 0) > 0 
+                    else (result.token_count_input or 0) + (result.token_count_output or 0),
                 estimated_cost_usd=total_cost,
                 first_seen=result.first_seen,
                 last_seen=result.last_seen
@@ -343,7 +344,8 @@ class LLMAnalytics(AnalysisInterface):
                 error_rate=error_rate,
                 token_count_input=result.token_count_input or 0,
                 token_count_output=result.token_count_output or 0,
-                token_count_total=result.token_count_total or 0,
+                token_count_total=(result.token_count_total or 0) if (result.token_count_total or 0) > 0 
+                    else (result.token_count_input or 0) + (result.token_count_output or 0),
                 estimated_cost_usd=agent_cost,
                 first_seen=result.first_seen,
                 last_seen=result.last_seen
@@ -435,7 +437,8 @@ class LLMAnalytics(AnalysisInterface):
                 error_rate=error_rate,
                 token_count_input=result.token_count_input or 0,
                 token_count_output=result.token_count_output or 0,
-                token_count_total=result.token_count_total or 0,
+                token_count_total=(result.token_count_total or 0) if (result.token_count_total or 0) > 0 
+                    else (result.token_count_input or 0) + (result.token_count_output or 0),
                 estimated_cost_usd=model_cost,
                 first_seen=result.first_seen,
                 last_seen=result.last_seen
@@ -550,7 +553,8 @@ class LLMAnalytics(AnalysisInterface):
                 error_rate=error_rate,
                 token_count_input=result.token_count_input or 0,
                 token_count_output=result.token_count_output or 0,
-                token_count_total=result.token_count_total or 0,
+                token_count_total=(result.token_count_total or 0) if (result.token_count_total or 0) > 0
+                    else (result.token_count_input or 0) + (result.token_count_output or 0),
                 estimated_cost_usd=bucket_cost,
                 first_seen=None,  # Time bucket is already represented by key
                 last_seen=None    # Time bucket is already represented by key
@@ -795,7 +799,8 @@ class LLMAnalytics(AnalysisInterface):
                 'request_count': row.request_count or 0,
                 'input_tokens': row.input_tokens or 0,
                 'output_tokens': row.output_tokens or 0,
-                'total_tokens': row.total_tokens or 0,
+                'total_tokens': (row.total_tokens or 0) if (row.total_tokens or 0) > 0
+                    else (row.input_tokens or 0) + (row.output_tokens or 0),
                 'avg_duration': row.avg_duration or 0
             })
         

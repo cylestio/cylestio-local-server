@@ -73,8 +73,9 @@ class Agent(Base):
             if version and agent.version != version:
                 agent.version = version
                 
-            if name and not agent.name:
-                agent.name = name
+            # Always ensure name matches agent_id for consistency
+            if agent.name != agent_id:
+                agent.name = agent_id
                 
             db_session.add(agent)
             return agent
@@ -84,7 +85,7 @@ class Agent(Base):
             agent_id=agent_id,
             system_info=system_info,
             version=version,
-            name=name or f"Agent-{agent_id[:8]}",
+            name=agent_id,  # Always use agent_id as the name for consistency
             first_seen=current_time,
             last_seen=current_time,
             is_active=True

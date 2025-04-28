@@ -55,7 +55,7 @@ def process_security_event(db_session: Session, event_data: Dict[str, Any]) -> T
             current_time = datetime.utcnow()
             agent = Agent(
                 agent_id=agent_id,  # This is the string identifier that will be referenced
-                name=f"Agent-{agent_id[:8]}",  # Generate a simple name from ID
+                name=agent_id,  # Use agent_id as the name for consistency
                 first_seen=current_time,
                 last_seen=current_time,
                 is_active=True
@@ -66,6 +66,9 @@ def process_security_event(db_session: Session, event_data: Dict[str, Any]) -> T
         else:
             # Update last_seen time
             agent.last_seen = datetime.utcnow()
+            # Ensure name matches agent_id for consistency
+            if agent.name != agent_id:
+                agent.name = agent_id
             db_session.add(agent)
             logger.debug(f"Using existing agent with agent_id={agent_id}, db id={agent.id}")
         

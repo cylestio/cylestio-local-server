@@ -48,11 +48,9 @@ class AgentDetail(BaseModel):
     name: str = Field(..., description="Agent name")
     type: AgentType = Field(..., description="Type of agent")
     status: AgentStatus = Field(..., description="Current agent status")
-    description: Optional[str] = Field(None, description="Agent description")
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
-    configuration: Optional[Dict[str, Any]] = Field(None, description="Agent configuration details")
-    metrics: Dict[str, Any] = Field(..., description="Summary metrics")
+    metrics: Dict[str, Any] = Field(..., description="Summary metrics including request_count, token_usage, avg_response_time_ms, tool_usage, error_count, security_alerts_count, and policy_violations_count")
 
 
 class AgentDashboardResponse(BaseModel):
@@ -211,4 +209,16 @@ class AlertsResponse(BaseModel):
     """Schema for alerts response"""
     items: List[AlertItem] = Field(..., description="List of alerts")
     pagination: Dict[str, Any] = Field(..., description="Pagination information")
-    meta: Dict[str, Any] = Field(..., description="Response metadata") 
+    meta: Dict[str, Any] = Field(..., description="Response metadata")
+
+
+class AgentCostResponse(BaseModel):
+    """Schema for agent cost response"""
+    agent_id: str = Field(..., description="Agent ID")
+    total_cost: float = Field(..., description="Total estimated cost in USD")
+    total_tokens: int = Field(..., description="Total token usage")
+    input_tokens: int = Field(..., description="Total input tokens")
+    output_tokens: int = Field(..., description="Total output tokens")
+    request_count: int = Field(..., description="Total LLM request count")
+    model_breakdown: Optional[List[LLMUsageItem]] = Field(None, description="Cost breakdown by model")
+    meta: Dict[str, Any] = Field(..., description="Response metadata with time period information") 

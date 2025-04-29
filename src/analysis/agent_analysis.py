@@ -537,6 +537,10 @@ def get_agent_llm_usage(
         output_tokens = usage.output_tokens or 0
         total_tokens_model = input_tokens + output_tokens
         
+        # Skip models with 0 tokens usage
+        if total_tokens_model == 0:
+            continue
+        
         # Calculate cost using pricing_service instead of hardcoded values
         cost_result = pricing_service.calculate_cost(input_tokens, output_tokens, model, vendor)
         estimated_cost = cost_result["total_cost"]

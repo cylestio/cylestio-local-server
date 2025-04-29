@@ -102,7 +102,7 @@ class DashboardResponse(BaseModel):
 class ToolInteractionDetailItem(BaseModel):
     """Schema for detailed tool interaction data"""
     id: int = Field(..., description="Tool interaction ID")
-    event_id: int = Field(..., description="Associated event ID")
+    associated_event_ids: List[int] = Field(default_factory=list, description="List of all event IDs associated with this tool interaction (sharing the same span_id)")
     tool_name: str = Field(..., description="Name of the tool")
     interaction_type: str = Field(..., description="Type of interaction (execution, result)")
     status: str = Field(..., description="Status of the tool interaction (success, error, pending)")

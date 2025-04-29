@@ -672,10 +672,19 @@ class ToolMetrics(AnalysisInterface):
             except (json.JSONDecodeError, TypeError):
                 result = tool_interaction.result
             
+            # Find all associated event IDs that share the same span_id
+            associated_event_ids = []
+            if span_id:
+                # Query all events with the same span_id to get their IDs
+                event_ids_query = self.db_session.query(Event.id).filter(
+                    Event.span_id == span_id
+                ).all()
+                associated_event_ids = [event_id[0] for event_id in event_ids_query]
+            
             # Create interaction data
             interaction_data = {
                 'id': tool_interaction.id,
-                'event_id': tool_interaction.event_id,
+                'associated_event_ids': associated_event_ids,
                 'tool_name': tool_interaction.tool_name or "unknown",
                 'interaction_type': tool_interaction.interaction_type or "unknown",
                 'status': tool_interaction.status or "unknown",

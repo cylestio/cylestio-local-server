@@ -236,6 +236,44 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
   
+  /v1/telemetry/events/by-ids:
+    post:
+      summary: Get Multiple Telemetry Events by IDs
+      description: Retrieves multiple telemetry events by providing a list of event IDs
+      operationId: getTelemetryEventsByIds
+      tags:
+        - Telemetry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                event_ids:
+                  type: array
+                  description: List of event IDs to retrieve
+                  items:
+                    type: string
+                    format: uuid
+              required:
+                - event_ids
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TelemetryEvent'
+        '400':
+          description: Bad request (too many IDs)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  
   /v1/telemetry/traces/{trace_id}/events:
     get:
       summary: Get Events by Trace ID

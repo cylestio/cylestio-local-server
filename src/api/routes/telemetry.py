@@ -299,6 +299,62 @@ async def get_telemetry_events(
     
     return result
 
+@router.post(
+    "/telemetry/events/by-ids", 
+    response_model=List[TelemetryEvent],
+    summary="Get multiple telemetry events by their IDs"
+)
+async def get_telemetry_events_by_ids(
+    event_ids: List[str] = Body(..., description="List of event IDs to retrieve"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get multiple telemetry events by providing a list of event IDs.
+    
+    Args:
+        event_ids: List of event IDs to retrieve
+        
+    Returns:
+        List[TelemetryEvent]: List of requested telemetry events
+    """
+    logger.info(f"Retrieving multiple events by IDs. Count: {len(event_ids)}")
+    
+    if len(event_ids) > 100:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot request more than 100 events at once"
+        )
+    
+    # Query events by IDs
+    events = db.query(Event).filter(Event.id.in_(event_ids)).all()
+    
+    # Create a mapping of id to event for preserving order
+    events_map = {str(event.id): event for event in events}
+    
+    # Convert to response model in the same order as requested
+    result = []
+    for event_id in event_ids:
+        event = events_map.get(event_id)
+        if event:
+            # Ensure raw_data is a dict or provide an empty dict if None
+            attributes = event.raw_data if event.raw_data is not None else {}
+            
+            event_dict = {
+                "id": str(event.id),
+                "schema_version": event.schema_version,
+                "timestamp": event.timestamp.isoformat() if isinstance(event.timestamp, datetime) else event.timestamp,
+                "trace_id": event.trace_id,
+                "span_id": event.span_id,
+                "parent_span_id": event.parent_span_id,
+                "name": event.name,
+                "level": event.level,
+                "agent_id": event.agent_id,
+                "attributes": attributes
+            }
+            result.append(TelemetryEvent(**event_dict))
+    
+    return result
+
 @router.get(
     "/telemetry/events/{event_id}", 
     response_model=TelemetryEvent,

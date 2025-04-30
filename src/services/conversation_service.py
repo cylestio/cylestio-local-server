@@ -277,7 +277,8 @@ class ConversationService:
                     content=content,
                     parent_id=None,  # We'll set this later
                     agent_id=request_row.agent_id,
-                    agent_name=request_row.agent_name or f"Agent-{request_row.agent_id[:8]}"
+                    agent_name=request_row.agent_name or f"Agent-{request_row.agent_id[:8]}",
+                    event_id=request_row.event_id  # Add the source event ID
                 ))
             
             # If we have a response row, create a response message
@@ -335,7 +336,8 @@ class ConversationService:
                     content=content,
                     parent_id=request_id,
                     agent_id=response_row.agent_id,
-                    agent_name=response_row.agent_name or f"Agent-{response_row.agent_id[:8]}"
+                    agent_name=response_row.agent_name or f"Agent-{response_row.agent_id[:8]}",
+                    event_id=response_row.event_id  # Add the source event ID
                 ))
         
         # Ensure messages are sorted by timestamp

@@ -33,7 +33,7 @@ async def get_security_alerts(
     category: Optional[List[str]] = Query(None, description="Filter by category (sensitive_data, prompt_injection, etc.)"),
     alert_level: Optional[List[str]] = Query(None, description="Filter by alert level (none, suspicious, dangerous, critical)"),
     llm_vendor: Optional[List[str]] = Query(None, description="Filter by LLM vendor (openai, anthropic, etc.)"),
-    agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
+    agent_id: Optional[str] = Query(None, description="Filter by agent ID - specify to see alerts from a particular agent only"),
     trace_id: Optional[str] = Query(None, description="Filter by trace ID for correlation"),
     span_id: Optional[str] = Query(None, description="Filter by span ID for correlation"),
     pattern: Optional[str] = Query(None, description="Search for specific pattern in detected keywords"),
@@ -46,6 +46,11 @@ async def get_security_alerts(
     
     This endpoint provides flexible querying of security alerts with pagination,
     filtering by various criteria, and support for correlation via trace_id and span_id.
+    
+    Key filters:
+    - agent_id: Filter alerts by a specific agent
+    - severity: Filter by alert severity levels
+    - category: Filter by alert categories
     
     Returns:
         Dict[str, Any]: Security alerts data and metrics
@@ -158,13 +163,18 @@ async def get_security_alerts_timeseries(
     interval: Optional[str] = Query("1d", description="Aggregation interval (1m, 1h, 1d, 7d)"),
     severity: Optional[str] = Query(None, description="Filter by alert severity"),
     category: Optional[str] = Query(None, description="Filter by category"),
-    agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
+    agent_id: Optional[str] = Query(None, description="Filter by agent ID - specify to see alerts from a particular agent only"),
     db: Session = Depends(get_db)
 ):
     """
     Get time series data for security alerts.
     
     This endpoint provides time-bucketed counts of security alerts for trend analysis.
+    
+    Key filters:
+    - agent_id: Filter time series data by a specific agent
+    - severity: Filter by severity level
+    - category: Filter by alert category
     
     Returns:
         Dict[str, Any]: Time series data
@@ -234,7 +244,7 @@ async def get_security_alerts_timeseries(
 )
 async def get_security_dashboard_overview(
     time_range: str = Query("7d", description="Time range (1h, 1d, 7d, 30d)"),
-    agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
+    agent_id: Optional[str] = Query(None, description="Filter by agent ID - specify to see overview for a particular agent only"),
     db: Session = Depends(get_db)
 ):
     """
@@ -242,6 +252,10 @@ async def get_security_dashboard_overview(
     
     This endpoint provides a comprehensive overview of security metrics for dashboards,
     including aggregate metrics, time series data, and recent alerts.
+    
+    Key filters:
+    - agent_id: Filter overview data by a specific agent
+    - time_range: Filter by time range
     
     Returns:
         Dict[str, Any]: Security overview data
@@ -271,14 +285,21 @@ async def get_security_alerts_stats(
     from_time: Optional[datetime] = Query(None, description="Start time (ISO format)"),
     to_time: Optional[datetime] = Query(None, description="End time (ISO format)"),
     time_range: Optional[str] = Query("30d", description="Predefined time range (1h, 1d, 7d, 30d)"),
-    agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
+    agent_id: Optional[str] = Query(None, description="Filter by agent ID - specify to see statistics for a particular agent only"),
     db: Session = Depends(get_db)
 ):
     """
-    Get security alerts statistics including count and breakdown by severity and type.
+    Get security alerts statistics.
+    
+    This endpoint provides aggregated statistics about security alerts, including trends,
+    top categories, and severity distributions.
+    
+    Key filters:
+    - agent_id: Filter statistics by a specific agent
+    - time_range: Filter by time range
     
     Returns:
-        Dict[str, Any]: Security alerts statistics
+        Dict[str, Any]: Security alert statistics
     """
     logger.info("Querying security alert statistics")
     

@@ -238,6 +238,7 @@ class ConversationMessage(BaseModel):
     parent_id: Optional[str] = Field(None, description="ID of parent message")
     agent_id: str = Field(..., description="Agent ID")
     agent_name: str = Field(..., description="Agent name")
+    event_id: Optional[int] = Field(None, description="ID of the source raw event")
 
 
 class ConversationDetailResponse(BaseModel):

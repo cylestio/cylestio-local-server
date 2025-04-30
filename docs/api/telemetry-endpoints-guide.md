@@ -256,6 +256,75 @@ async function getAgentEvents(agentId, timeRange = '1d', limit = 50) {
 }
 ```
 
+## Get Multiple Telemetry Events by IDs
+
+Retrieve multiple specific telemetry events by providing a list of event IDs.
+
+**Endpoint**: `POST /v1/telemetry/events/by-ids`
+
+**Request Body**:
+```json
+{
+  "event_ids": [
+    "evt-123456789",
+    "evt-987654321"
+  ]
+}
+```
+
+**Response**:
+```json
+[
+  {
+    "id": "evt-123456789",
+    "schema_version": "1.0",
+    "timestamp": "2024-03-01T12:34:56.789Z",
+    "trace_id": "trace-123456789",
+    "span_id": "span-123456789",
+    "parent_span_id": null,
+    "name": "llm.request",
+    "level": "INFO",
+    "agent_id": "agent-123456789",
+    "attributes": {
+      "llm.model": "claude-3-opus",
+      "llm.prompt": "Explain quantum physics"
+    }
+  },
+  {
+    "id": "evt-987654321",
+    "schema_version": "1.0",
+    "timestamp": "2024-03-01T12:35:00.123Z",
+    "trace_id": "trace-123456789",
+    "span_id": "span-987654321",
+    "parent_span_id": "span-123456789",
+    "name": "llm.response",
+    "level": "INFO",
+    "agent_id": "agent-123456789",
+    "attributes": {
+      "llm.model": "claude-3-opus",
+      "llm.completion": "Quantum physics is..."
+    }
+  }
+]
+```
+
+### Example: Retrieving Multiple Events by IDs
+
+```typescript
+// Web App Dashboard code example
+async function getEventsByIds(eventIds) {
+  const response = await fetch('/v1/telemetry/events/by-ids', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ event_ids: eventIds })
+  });
+
+  return await response.json();
+}
+```
+
 ## Get a Specific Telemetry Event by ID
 
 Retrieve a specific telemetry event by its ID.

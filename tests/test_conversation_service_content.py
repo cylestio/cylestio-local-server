@@ -90,37 +90,40 @@ class TestConversationServiceContent:
         
         # Create mock query results with null values
         mock_row_request = MagicMock()
-        mock_row_request.event_id = 1
-        mock_row_request.interaction_id = 1
-        mock_row_request.timestamp = datetime.utcnow()
+        mock_row_request.event_id = 123
+        mock_row_request.interaction_id = 456
+        mock_row_request.timestamp = datetime.now()
         mock_row_request.trace_id = "test-trace"
         mock_row_request.span_id = "test-span"
         mock_row_request.model = "gpt-4"
         mock_row_request.interaction_type = "start"
-        mock_row_request.agent_id = "test-agent"
-        mock_row_request.agent_name = "Test Agent"
-        mock_row_request.request_data = {"content": "Hello"}
-        mock_row_request.duration_ms = None  # Null duration
-        mock_row_request.input_tokens = None  # Null input tokens
+        mock_row_request.request_data = None
+        mock_row_request.response_content = None
+        mock_row_request.duration_ms = None
+        mock_row_request.input_tokens = None
         mock_row_request.output_tokens = None
         mock_row_request.total_tokens = None
+        mock_row_request.agent_id = "test-agent"
+        mock_row_request.agent_name = "Test Agent"
+        mock_row_request.related_interaction_id = 789
         
         mock_row_response = MagicMock()
-        mock_row_response.event_id = 2
-        mock_row_response.interaction_id = 2
-        mock_row_response.timestamp = datetime.utcnow()
+        mock_row_response.event_id = 321
+        mock_row_response.interaction_id = 654
+        mock_row_response.timestamp = datetime.now() + timedelta(seconds=1)
         mock_row_response.trace_id = "test-trace"
         mock_row_response.span_id = "test-span"
         mock_row_response.model = "gpt-4"
         mock_row_response.interaction_type = "finish"
+        mock_row_response.request_data = {"content": "test content"}
+        mock_row_response.response_content = {"content": "test response"}
+        mock_row_response.duration_ms = 500
+        mock_row_response.input_tokens = 3
+        mock_row_response.output_tokens = None
+        mock_row_response.total_tokens = 10
         mock_row_response.agent_id = "test-agent"
         mock_row_response.agent_name = "Test Agent"
-        mock_row_response.response_content = "I'm fine, thanks"
-        mock_row_response.duration_ms = 1000
-        mock_row_response.input_tokens = 3
-        mock_row_response.output_tokens = None  # Null output tokens
-        mock_row_response.total_tokens = 10  # Total tokens available
-        mock_row_response.stop_reason = "end_turn"
+        mock_row_response.related_interaction_id = 456
         
         # Mock the query to return our mock results
         mock_query = MagicMock()
@@ -136,15 +139,18 @@ class TestConversationServiceContent:
             assert message.input_tokens is not None
             assert message.output_tokens is not None
             assert message.content is not None
+            assert message.event_id is not None  # Verify event_id is populated
             
         # Verify request message has tokens from response
         request_message = next(m for m in messages if m.message_type == "request")
         assert request_message.input_tokens == 3  # Should use input_tokens from response
         assert request_message.duration_ms == 0  # Default for null
+        assert request_message.event_id == 123  # Should have event_id from request row
         
         # Verify response message calculated output tokens correctly
         response_message = next(m for m in messages if m.message_type == "response")
         assert response_message.output_tokens == 7  # Should be total_tokens - input_tokens = 10 - 3 = 7
+        assert response_message.event_id == 321  # Should have event_id from response row
     
     def test_llm_requests_content_extraction(self):
         """Test that LLM requests never have null content fields."""

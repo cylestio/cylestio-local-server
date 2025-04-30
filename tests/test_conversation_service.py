@@ -166,12 +166,14 @@ class TestConversationService:
         assert user_message.content == "Hello, how are you?"
         assert user_message.trace_id == "test-trace-123"
         assert user_message.agent_id == "test-agent-123"
+        assert user_message.event_id is not None
         
         # Find the assistant message
         assistant_message = next(m for m in messages if m.role == "assistant")
         assert "I'm doing well" in assistant_message.content
         assert assistant_message.trace_id == "test-trace-123"
         assert assistant_message.model == "gpt-4"
+        assert assistant_message.event_id is not None
     
     def test_get_llm_requests(self, db_session, setup_test_data):
         """Test retrieving LLM requests with agent information."""

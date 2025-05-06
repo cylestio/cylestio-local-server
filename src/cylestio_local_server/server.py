@@ -5,17 +5,18 @@ This file provides direct access to the server when installed as a package.
 """
 import os
 import sys
-import importlib
+import importlib.util
 import uvicorn
 
-# Add the path to src directory
-package_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-sys.path.insert(0, package_root)
+# Import src bridge module first to setup proper imports
+from cylestio_local_server.src import *
 
-# Import the app directly
+# Now import modules from src
 from src.api import create_api_app
 from src.utils.logging import configure_logging, get_logger
 from src.config.settings import get_settings
+from src.database.session import init_db
+from src.models.base import engine
 
 # Configure logging
 configure_logging()
@@ -41,9 +42,21 @@ def run_server(host="0.0.0.0", port=8000, db_path="cylestio.db", reload=False, d
     os.environ["DATABASE_URL"] = f"sqlite:///{db_path}"
     os.environ["DEBUG"] = str(debug).lower()
     
+    # Initialize the database if needed
+    try:
+        print(f"Initializing database at: {db_path}")
+        print("This may take a moment on first run...")
+        init_db()
+        print("Database initialization complete!")
+    except Exception as e:
+        logger.error(f"Error initializing database: {str(e)}")
+        print(f"Error initializing database: {str(e)}")
+        print("The server will start, but some features may not work correctly.")
+    
     # Log startup information
     print(f"Starting Cylestio Local Server on {host}:{port}")
     print(f"Using database: {db_path}")
+    print("API documentation: http://localhost:8000/docs")
     
     # Run the server with uvicorn
     uvicorn.run(

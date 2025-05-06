@@ -3,10 +3,20 @@ include README.md
 include CONTRIBUTING.md
 include src/requirements.txt
 
+# Include all Python files
 recursive-include src *.py
 recursive-include src *.sql
 recursive-include src *.json
 recursive-include src *.yaml *.yml
+recursive-include src *.md
+
+# Explicitly include __init__.py files at all levels
+recursive-include src */__init__.py
+recursive-include src */*/__init__.py
+recursive-include src */*/*/__init__.py
+
+# Ensure src/__init__.py is included
+include src/__init__.py
 
 prune tests
 prune tmp

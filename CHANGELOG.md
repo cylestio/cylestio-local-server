@@ -5,6 +5,15 @@ All notable changes to the cylestio-local-server package will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.20] - 2025-05-06
+
+### Fixed
+- Fixed packaging to ensure `pip install cylestio-local-server` works properly
+- Improved dynamic import system in src.py to work correctly in pip-installed packages
+- Updated MANIFEST.in to ensure all required files are included in distribution
+- Added proper package data configuration to pyproject.toml
+- Added setup.py for compatibility with different installation methods
+
 ## [0.1.16] - 2025-05-06
 
 ### Added

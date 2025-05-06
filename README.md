@@ -3,6 +3,7 @@
 A lightweight, self-hosted server for collecting, processing, and analyzing telemetry data from AI agents.
 
 ![License](https://img.shields.io/github/license/cylestio/cylestio-local-server)
+[![PyPI version](https://badge.fury.io/py/cylestio-local-server.svg)](https://badge.fury.io/py/cylestio-local-server)
 
 ## Overview
 
@@ -30,52 +31,46 @@ Cylestio Local Server provides a comprehensive solution for monitoring and analy
 
 ## Installation
 
-### Prerequisites
-
-- Python 3.9 or higher
-- pip (Python package manager)
-- git (for cloning the repository)
-
-### Steps
-
-1. **Clone the Repository**
+### Option 1: Install from PyPI (Recommended)
 
 ```bash
+pip install cylestio-local-server
+```
+
+### Option 2: Install from Source
+
+```bash
+# Clone the repository
 git clone https://github.com/cylestio/cylestio-local-server.git
 cd cylestio-local-server
-```
 
-2. **Create a Virtual Environment (Recommended)**
-
-```bash
-# Create a virtual environment
-python -m venv venv
-
-# Activate the virtual environment
-# On Windows:
-venv\Scripts\activate
-# On macOS/Linux:
-source venv/bin/activate
-```
-
-3. **Install Dependencies**
-
-```bash
-pip install -r src/requirements.txt
+# Install in development mode
+pip install -e .
 ```
 
 ## Quick Start
 
-Start the server using uvicorn:
+### Starting the server (from PyPI installation)
 
 ```bash
-uvicorn src.main:app --host 0.0.0.0 --port 8000
+# Start with default settings (port 8000, database in current directory)
+cylestio-server
+
+# Specify host, port and database path
+cylestio-server --host 127.0.0.1 --port 9000 --db-path /path/to/database.db
+
+# Enable development mode with auto-reload
+cylestio-server --reload --debug
 ```
 
-For development with hot reloading:
+### Starting the server (from source)
 
 ```bash
-uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+# From the repository root
+python -m src.main
+
+# With custom port
+python -m src.main --port 9000
 ```
 
 ### Verify Installation
@@ -97,7 +92,7 @@ uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 
 ## Configuration
 
-The server can be configured using environment variables or a `.env` file in the root directory.
+The server can be configured using environment variables, command-line arguments, or a `.env` file in the root directory.
 
 ### Configuration Options
 

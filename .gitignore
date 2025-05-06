@@ -178,3 +178,6 @@ example*
 telemetry_schema.md
 *.db
 *.db-*
+
+# macOS specific files
+.DS_Store

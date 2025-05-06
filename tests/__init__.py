@@ -1,3 +1,3 @@
 """
-Test package for Cylestio Local Server.
+Tests package for cylestio-local-server.
 """ 

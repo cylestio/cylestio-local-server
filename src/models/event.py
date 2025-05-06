@@ -72,6 +72,7 @@ class Event(Base):
         Index("ix_events_span_timestamp", span_id, timestamp.desc()),
         Index("ix_events_session_timestamp", session_id, timestamp.desc()),
         Index("ix_events_type_timestamp", event_type, timestamp.desc()),
+        {"extend_existing": True}
     )
     
     def __repr__(self) -> str:

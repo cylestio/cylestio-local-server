@@ -173,11 +173,19 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
+# Project specific
 tasks/
 example*
 telemetry_schema.md
 *.db
 *.db-*
+test_venv/
+test_wheel_env/
+test_pypi_install/
+test_local_install/
+test_package_install.py
+build_and_test.sh
+server_debug.log
 
 # macOS specific files
 .DS_Store

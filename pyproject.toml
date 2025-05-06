@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cylestio-local-server"
-version = "0.1.16"
+version = "0.1.20"
 description = "A lightweight, self-hosted server for collecting, processing, and analyzing telemetry data from AI agents"
 readme = "README.md"
 authors = [
@@ -61,11 +61,15 @@ cylestio-server = "cylestio_local_server.cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
+include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["*"]
 exclude = ["tests*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.py", "*.json", "*.yaml", "*.yml", "*.sql"]
 
 [tool.black]
 line-length = 88

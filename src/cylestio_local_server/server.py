@@ -7,6 +7,7 @@ import os
 import sys
 import importlib.util
 import uvicorn
+import pathlib
 
 # Import src bridge module first to setup proper imports
 from cylestio_local_server.src import *
@@ -60,12 +61,26 @@ def run_server(host="0.0.0.0", port=8000, db_path="cylestio.db", reload=False, d
         autocommit=False, autoflush=False, bind=src.models.base.engine
     )
     
+    # Check if database already exists
+    db_file = pathlib.Path(db_path)
+    is_new_db = not db_file.exists()
+    
     # Initialize the database if needed
     try:
-        print(f"Initializing database at: {db_path}")
-        print("This may take a moment on first run...")
+        if is_new_db:
+            print(f"Creating new database at: {db_path}")
+            print("This may take a moment...")
+        else:
+            print(f"Using existing database at: {db_path}")
+            print("Checking for required tables...")
+            
         init_db()
-        print("Database initialization complete!")
+        
+        if is_new_db:
+            print("✅ Database created successfully!")
+        else:
+            print("✅ Database checks completed successfully!")
+            
     except Exception as e:
         logger.error(f"Error initializing database: {str(e)}")
         print(f"Error initializing database: {str(e)}")

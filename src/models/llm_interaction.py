@@ -23,6 +23,11 @@ class LLMInteraction(Base):
     """
     __tablename__ = "llm_interactions"
     
+    # Adding table_args with extend_existing=True to fix SQLAlchemy error
+    __table_args__ = (
+        {"extend_existing": True}
+    )
+    
     id = Column(Integer, primary_key=True, autoincrement=True)
     event_id = Column(Integer, ForeignKey("events.id"), nullable=False, index=True)
     interaction_type = Column(String, nullable=False, index=True)  # 'start' or 'finish'

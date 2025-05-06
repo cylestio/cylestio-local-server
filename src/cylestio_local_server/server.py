@@ -39,8 +39,26 @@ def run_server(host="0.0.0.0", port=8000, db_path="cylestio.db", reload=False, d
     # Set environment variables for configuration
     os.environ["HOST"] = host
     os.environ["PORT"] = str(port)
-    os.environ["DATABASE_URL"] = f"sqlite:///{db_path}"
+    
+    # Ensure we use the correct database path
+    database_url = f"sqlite:///{db_path}"
+    os.environ["DATABASE_URL"] = database_url
     os.environ["DEBUG"] = str(debug).lower()
+    
+    # Force the import to use the new value by updating the imported constants
+    # This step is crucial because some modules cache the values at import time
+    import src.models.base
+    src.models.base.DATABASE_URL = database_url
+    src.models.base.engine = src.models.base.create_engine(
+        database_url,
+        connect_args={"check_same_thread": False},
+        echo=os.environ.get("SQL_ECHO", "false").lower() == "true",
+        json_serializer=src.models.base.dumps,
+        json_deserializer=src.models.base.loads
+    )
+    src.models.base.SessionLocal = src.models.base.sessionmaker(
+        autocommit=False, autoflush=False, bind=src.models.base.engine
+    )
     
     # Initialize the database if needed
     try:
@@ -56,7 +74,7 @@ def run_server(host="0.0.0.0", port=8000, db_path="cylestio.db", reload=False, d
     # Log startup information
     print(f"Starting Cylestio Local Server on {host}:{port}")
     print(f"Using database: {db_path}")
-    print("API documentation: http://localhost:8000/docs")
+    print(f"API documentation: http://{host if host != '0.0.0.0' else 'localhost'}:{port}/docs")
     
     # Run the server with uvicorn
     uvicorn.run(

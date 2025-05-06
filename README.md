@@ -3,7 +3,7 @@
 A lightweight, self-hosted server for collecting, processing, and analyzing telemetry data from AI agents.
 
 ![License](https://img.shields.io/github/license/cylestio/cylestio-local-server)
-[![PyPI version](https://badge.fury.io/py/cylestio-local-server.svg)](https://badge.fury.io/py/cylestio-local-server)
+[![PyPI version](https://img.shields.io/pypi/v/cylestio-local-server.svg)](https://pypi.org/project/cylestio-local-server/)
 
 ## Overview
 
